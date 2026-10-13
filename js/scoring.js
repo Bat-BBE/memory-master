@@ -7,6 +7,13 @@
   var TIME_BONUS_PER_SEC = 5;
   var EFFICIENCY_BONUS_PER_MOVE = 15;
 
+  // Star thresholds, shared with the UI so displayed guidance ("3 stars: ≤N moves")
+  // can never drift out of sync with what calcStars() actually awards.
+  var STAR_THRESHOLDS = {
+    threeStarMoveRatio: 2.1, threeStarTimeRatio: 0.25,
+    twoStarMoveRatio: 3.2, twoStarTimeRatio: 0.1
+  };
+
   // Points for finding a correct pair; combo (consecutive correct pairs) adds a bonus.
   function pairScore(combo) {
     return BASE_PAIR_SCORE + Math.max(0, combo - 1) * COMBO_STEP;
@@ -23,8 +30,9 @@
 
   function calcStars(moves, pairCount, timeLeft, totalTime) {
     var eff = moves / Math.max(1, pairCount);
-    if (timeLeft > totalTime * 0.25 && eff <= 2.1) return 3;
-    if (timeLeft > totalTime * 0.1 && eff <= 3.2) return 2;
+    var t = STAR_THRESHOLDS;
+    if (timeLeft > totalTime * t.threeStarTimeRatio && eff <= t.threeStarMoveRatio) return 3;
+    if (timeLeft > totalTime * t.twoStarTimeRatio && eff <= t.twoStarMoveRatio) return 2;
     return 1;
   }
 
@@ -33,6 +41,7 @@
     pairScore: pairScore,
     timeBonus: timeBonus,
     efficiencyBonus: efficiencyBonus,
-    calcStars: calcStars
+    calcStars: calcStars,
+    STAR_THRESHOLDS: STAR_THRESHOLDS
   };
 })(window);

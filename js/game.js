@@ -14,7 +14,7 @@
   var data = Storage.load();
   var level = 0, cards = [], first = null, second = null, lock = false;
   var timeLeft = 0, totalTime = 0, score = 0, moves = 0, pairs = 0, combo = 0;
-  var timer = null, mismatchTimer = null, paused = false, startedAt = 0, hintUsed = false;
+  var timer = null, mismatchTimer = null, hintTimer = null, paused = false, startedAt = 0, hintUsed = false;
   var audioCtx = null;
 
   /* ---------- helpers ---------- */
@@ -53,8 +53,8 @@
   }
 
   function stopTimers() {
-    clearInterval(timer); clearTimeout(mismatchTimer);
-    timer = null; mismatchTimer = null;
+    clearInterval(timer); clearTimeout(mismatchTimer); clearTimeout(hintTimer);
+    timer = null; mismatchTimer = null; hintTimer = null;
   }
 
   function tierColorStyle(level) {
@@ -126,7 +126,9 @@
     tierTag.textContent = l.tier;
     tierTag.parentElement.style.cssText = tierColorStyle(l);
     $("goalText").textContent = pairCount + " хосыг " + fmt(l.time) + " дотор ол.";
-    $("starText").textContent = "3 од: " + Math.max(1, Math.floor(pairCount * 1.35)) + " буюу түүнээс цөөн нүүдэл хийж цаг хэмнэ.";
+    var threeStarMoves = Math.max(pairCount, Math.floor(pairCount * Scoring.STAR_THRESHOLDS.threeStarMoveRatio));
+    var threeStarTimePct = Math.round(Scoring.STAR_THRESHOLDS.threeStarTimeRatio * 100);
+    $("starText").textContent = "3 од: " + threeStarMoves + " буюу түүнээс цөөн нүүдэл хийж, хугацааны дээш " + threeStarTimePct + "%-ийг үлдээвэл.";
     $("tipText").textContent = level < 4
       ? "Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
       : "Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";
@@ -285,11 +287,16 @@
     }
     if (!pair) return;
     hintUsed = true;
+    lock = true; // block real picks while the hint is peeking, so a tap on a hinted
+                 // card can't become the player's real "first" pick mid-reveal and
+                 // then get its flipped state silently wiped by the cleanup below.
     score = Math.max(0, score - 50);
     pair.forEach(function (c) { c.element.classList.add("flipped"); });
     playTone(660, 0.1);
-    setTimeout(function () {
+    hintTimer = setTimeout(function () {
       pair.forEach(function (c) { if (!c.matched) c.element.classList.remove("flipped"); });
+      lock = false;
+      hintTimer = null;
     }, 850);
     updateMetrics();
     toast("Тусламж ашиглалаа: -50 оноо", "sparkles");
