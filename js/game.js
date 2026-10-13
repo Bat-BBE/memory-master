@@ -4,8 +4,10 @@
 
   var LEVELS = window.MM.LEVELS;
   var EMOJIS = window.MM.EMOJIS;
+  var TIERS = window.MM.TIERS;
   var Storage = window.MM.Storage;
   var Scoring = window.MM.Scoring;
+  var Icon = window.MM.Icon;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -27,9 +29,9 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function toast(msg) {
+  function toast(msg, icon) {
     var t = $("toast");
-    t.textContent = msg;
+    t.innerHTML = (icon ? Icon(icon) : "") + "<span>" + msg + "</span>";
     t.classList.add("show");
     clearTimeout(t._hideTimer);
     t._hideTimer = setTimeout(function () { t.classList.remove("show"); }, 2100);
@@ -74,13 +76,15 @@
     var stars = data.stars[i] || 0;
     var done = data.completed.includes(i);
     var pairCount = (l.rows * l.cols) / 2;
+    var iconName = unlocked ? (done ? "check-circle" : l.tierIcon) : "lock";
+    var iconClass = "level-icon" + (!unlocked ? " locked" : done ? " done" : "");
     var b = document.createElement("button");
     b.className = "level-card";
     b.disabled = !unlocked;
     b.style.cssText = tierColorStyle(l);
     b.innerHTML =
       '<span class="tier-pill">' + l.tier + '</span>' +
-      '<span class="emoji">' + (unlocked ? (done ? "✅" : l.icon) : "🔒") + '</span>' +
+      '<span class="' + iconClass + '">' + Icon(iconName) + '</span>' +
       '<strong>' + String(i + 1).padStart(2, "0") + '. ' + l.name + '</strong>' +
       '<small>' + l.rows + ' × ' + l.cols + ' · ' + pairCount + ' хос<br>' + fmt(l.time) + ' хугацаа</small>' +
       '<div class="progress">' + (unlocked ? (done ? "★".repeat(stars) + "☆".repeat(3 - stars) : "НЭЭЛТТЭЙ") : "ӨМНӨХ ТҮВШИНГ ДАВ") + '</div>';
@@ -124,8 +128,8 @@
     $("goalText").textContent = pairCount + " хосыг " + fmt(l.time) + " дотор ол.";
     $("starText").textContent = "3 од: " + Math.max(1, Math.floor(pairCount * 1.35)) + " буюу түүнээс цөөн нүүдэл хийж цаг хэмнэ.";
     $("tipText").textContent = level < 4
-      ? "💡 Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
-      : "🧠 Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";
+      ? "Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
+      : "Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";
 
     var board = $("board");
     board.innerHTML = "";
@@ -140,7 +144,8 @@
       board.appendChild(btn);
     });
 
-    $("pauseBtn").textContent = "Ⅱ  Түр зогсоох";
+    $("pauseIcon").innerHTML = Icon("pause");
+    $("pauseLabel").textContent = "Түр зогсоох";
     updateMetrics();
     showScreen("game");
     timer = setInterval(tick, 1000);
@@ -169,7 +174,7 @@
       first = second = null; lock = false;
       updateMetrics();
       if (pairs === cards.length / 2) { finish(true); return; }
-      toast(combo > 1 ? "🔥 " + combo + " дараалсан хос! +" + gained : "✨ Зөв хос! +" + gained);
+      toast(combo > 1 ? combo + " дараалсан хос! +" + gained : "Зөв хос! +" + gained, combo > 1 ? "flame" : "sparkles");
     } else {
       combo = 0;
       a.element.classList.add("shake"); b.element.classList.add("shake");
@@ -221,7 +226,7 @@
       playTone(180, 0.3, "sawtooth");
     }
 
-    $("resultIcon").textContent = won ? (stars === 3 ? "🏆" : stars === 2 ? "🌟" : "🎉") : "⏳";
+    $("resultIcon").innerHTML = Icon(won ? (stars === 3 ? "trophy" : stars === 2 ? "star" : "sparkles") : "hourglass");
     $("resultEyebrow").textContent = won ? "ТҮВШИН ДАВАГДЛАА" : "ДАХИН ОРОЛДООД ҮЗ!";
     $("resultTitle").textContent = won ? (stars === 3 ? "Гайхалтай!" : stars === 2 ? "Маш сайн!" : "Сайн байна!") : "Хугацаа дууслаа";
     $("resultMessage").textContent = won
@@ -229,7 +234,7 @@
       : "Бага зэрэг амраад дахин оролдоорой. Хосуудын байрлалыг тогтоох нь амжилтын түлхүүр!";
     $("resultScore").textContent = score;
     $("resultTime").textContent = fmt(elapsed);
-    $("resultStars").textContent = won ? "⭐".repeat(stars) + "☆".repeat(3 - stars) : "—";
+    $("resultStars").textContent = won ? "★".repeat(stars) + "☆".repeat(3 - stars) : "—";
     $("nextBtn").style.display = (won && level < LEVELS.length - 1) ? "inline-block" : "none";
 
     if (won && stars >= 2) fireConfetti();
@@ -262,14 +267,15 @@
   function togglePause() {
     if (!timer && !paused) return;
     paused = !paused;
-    $("pauseBtn").textContent = paused ? "▶  Үргэлжлүүлэх" : "Ⅱ  Түр зогсоох";
-    if (paused) { clearInterval(timer); timer = null; toast("Тоглоом түр зогслоо"); }
-    else { timer = setInterval(tick, 1000); toast("Үргэлжлүүллээ"); }
+    $("pauseIcon").innerHTML = Icon(paused ? "play" : "pause");
+    $("pauseLabel").textContent = paused ? "Үргэлжлүүлэх" : "Түр зогсоох";
+    if (paused) { clearInterval(timer); timer = null; toast("Тоглоом түр зогслоо", "pause"); }
+    else { timer = setInterval(tick, 1000); toast("Үргэлжлүүллээ", "play"); }
   }
 
   function hint() {
     if (paused || lock || !timer) return;
-    if (hintUsed) { toast("Энэ түвшинд тусламжийг нэг удаа ашиглана."); return; }
+    if (hintUsed) { toast("Энэ түвшинд тусламжийг нэг удаа ашиглана.", "lock"); return; }
     var unmatched = cards.map(function (c, i) { return Object.assign({}, c, { index: i }); }).filter(function (c) { return !c.matched; });
     var pair = null;
     for (var i = 0; i < unmatched.length && !pair; i++) {
@@ -286,7 +292,7 @@
       pair.forEach(function (c) { if (!c.matched) c.element.classList.remove("flipped"); });
     }, 850);
     updateMetrics();
-    toast("✨ Тусламж ашиглалаа: -50 оноо");
+    toast("Тусламж ашиглалаа: -50 оноо", "sparkles");
   }
 
   /* ---------- modals ---------- */
@@ -299,18 +305,17 @@
     $("achvLevels").textContent = data.completed.length + " / " + LEVELS.length;
     $("achvScore").textContent = data.bestScore || 0;
 
-    var tiers = window.MM.TIERS;
     var order = ["beginner", "simple", "medium", "hard", "master"];
     var wrap = $("tierBadges");
     wrap.innerHTML = "";
     order.forEach(function (key) {
       var idxs = LEVELS.map(function (l, i) { return l.tierKey === key ? i : -1; }).filter(function (i) { return i >= 0; });
       var earned = idxs.length > 0 && idxs.every(function (i) { return data.completed.includes(i); });
-      var t = tiers[key];
+      var t = TIERS[key];
       var el = document.createElement("div");
       el.className = "tier-badge" + (earned ? " earned" : "");
       el.style.cssText = "--tier-color:var(" + t.color + ")";
-      el.innerHTML = '<span class="ic">' + t.icon + '</span>' + t.label;
+      el.innerHTML = '<span class="ic">' + Icon(t.icon) + '</span>' + t.label;
       wrap.appendChild(el);
     });
   }
@@ -324,7 +329,7 @@
       var best = data.scores[i] || 0;
       var li = document.createElement("li");
       li.innerHTML =
-        '<span class="rl-name">' + (unlocked ? l.icon : "🔒") + ' ' + (i + 1) + '. ' + l.name + '</span>' +
+        '<span class="rl-name">' + Icon(unlocked ? l.tierIcon : "lock") + ' ' + (i + 1) + '. ' + l.name + '</span>' +
         '<span class="rl-stars">' + (unlocked ? ("★".repeat(stars) + "☆".repeat(3 - stars)) : "—") + '</span>' +
         '<span class="rl-score">' + best + '</span>';
       list.appendChild(li);
@@ -342,7 +347,7 @@
 
   function applySound(on) {
     data.soundOn = on;
-    $("soundBtn").textContent = on ? "🔊" : "🔇";
+    $("soundBtn").innerHTML = Icon(on ? "volume-2" : "volume-x");
     $("soundToggle").classList.toggle("on", on);
     save();
     if (on) playTone(600, 0.08);
@@ -401,10 +406,11 @@
   });
 
   /* ---------- init ---------- */
+  window.MM.hydrateIcons();
   document.documentElement.setAttribute("data-theme", data.theme || "dark");
   $("themeDarkBtn").classList.toggle("active", (data.theme || "dark") === "dark");
   $("themeLightBtn").classList.toggle("active", data.theme === "light");
-  $("soundBtn").textContent = data.soundOn ? "🔊" : "🔇";
+  $("soundBtn").innerHTML = Icon(data.soundOn ? "volume-2" : "volume-x");
   $("soundToggle").classList.toggle("on", !!data.soundOn);
   $("volumeRange").value = Math.round((typeof data.volume === "number" ? data.volume : 0.7) * 100);
   $("volumeLabel").textContent = Math.round((typeof data.volume === "number" ? data.volume : 0.7) * 100) + "%";
