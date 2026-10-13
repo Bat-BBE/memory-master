@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080b20">
+<title>Memory Master — Тархины сорил</title>
+<style>
+:root{--bg:#080b20;--panel:rgba(16,23,55,.88);--panel2:#101a3a;--line:rgba(132,151,255,.24);--text:#f4f6ff;--muted:#a9b5df;--cyan:#5ee7ff;--purple:#9c72ff;--gold:#ffd35a;--pink:#ff68b9;--green:#4cf0bb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(ellipse at 15% 0%,#182c68 0,transparent 36%),radial-gradient(ellipse at 100% 35%,#35165d 0,transparent 32%),var(--bg);overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;background-image:radial-gradient(#a6b8ff 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(to bottom,#000,transparent 85%)}
+button{font:inherit;cursor:pointer;border:0;color:inherit}button:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+.app{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:24px 0 36px;position:relative}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:.08em}.brand-icon{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;font-size:23px;background:linear-gradient(135deg,#6e75ff,#d45cff);box-shadow:0 0 28px #805dff55}
+.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:.22em;margin-top:3px}
+.top-actions{display:flex;gap:8px}.icon-btn{width:42px;height:42px;border:1px solid var(--line);background:#111a3d;border-radius:14px;font-size:18px;transition:.2s}.icon-btn:hover{transform:translateY(-2px);border-color:var(--cyan)}
+.screen{display:none;animation:fade .3s ease}.screen.active{display:block}@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:stretch}
+.panel{background:linear-gradient(145deg,rgba(19,29,68,.92),rgba(8,14,37,.94));border:1px solid var(--line);border-radius:26px;box-shadow:0 18px 55px #0003;backdrop-filter:blur(12px)}
+.hero-copy{padding:clamp(24px,5vw,52px);position:relative;overflow:hidden;min-height:380px}.eyebrow{color:var(--cyan);font-size:12px;font-weight:800;letter-spacing:.2em;text-transform:uppercase}
+h1{font-size:clamp(42px,7vw,78px);line-height:.98;letter-spacing:-.06em;margin:18px 0 16px;font-weight:1000}h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17bff 85%);color:transparent;background-clip:text}
+.subtitle{max-width:470px;color:var(--muted);line-height:1.75;margin:0 0 25px}
+.primary,.secondary{padding:14px 22px;border-radius:15px;font-weight:850;transition:.2s}.primary{color:#15152a;background:linear-gradient(135deg,#ffe77c,#ffad36);box-shadow:0 8px 26px #ffbd3d30}.primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px #ffbd3d48}.secondary{background:#14234c;border:1px solid var(--line)}.secondary:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.hero-buttons{display:flex;gap:10px;flex-wrap:wrap}.stats-row{display:flex;gap:20px;flex-wrap:wrap;margin-top:30px;color:var(--muted);font-size:12px}.stats-row b{color:white;display:block;font-size:19px;margin-bottom:3px}
+.hero-art{display:flex;align-items:center;justify-content:center;min-height:360px;position:relative;overflow:hidden}.orb{width:230px;height:230px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 25%,#394fa8,#161e55 60%,#0b102b);border:1px solid #8ca2ff70;box-shadow:0 0 80px #745aff3d,inset 0 0 40px #68dfff22;font-size:95px;position:relative}.orb:before,.orb:after{content:"";position:absolute;border:1px solid #7f88ff65;border-radius:50%;inset:-24px;transform:rotateX(65deg) rotate(-20deg)}.orb:after{inset:-45px;transform:rotateX(65deg) rotate(35deg);border-color:#4de6ff55}.float-card{position:absolute;width:78px;height:98px;border-radius:15px;background:linear-gradient(145deg,#6c69ed,#252d78);border:2px solid #a9a2ff;display:grid;place-items:center;font-size:32px;box-shadow:0 10px 30px #0005;animation:float 4s ease-in-out infinite}.fc1{top:14%;left:12%;transform:rotate(-13deg)}.fc2{right:11%;top:17%;transform:rotate(13deg);animation-delay:-1.5s}.fc3{left:18%;bottom:12%;transform:rotate(10deg);animation-delay:-2s}.fc4{right:15%;bottom:11%;transform:rotate(-12deg);animation-delay:-.7s}@keyframes float{0%,100%{translate:0 0}50%{translate:0 -12px}}
+.section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:28px 0 14px}.section-head h2{margin:0;font-size:23px}.section-head p{margin:5px 0 0;color:var(--muted);font-size:13px}
+.level-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.level-card{padding:19px;border-radius:20px;background:linear-gradient(150deg,#141f4a,#0d1430);border:1px solid var(--line);text-align:left;transition:.2s;min-height:145px}.level-card:hover:not(:disabled){transform:translateY(-4px);border-color:var(--purple);box-shadow:0 10px 30px #7e54ff20}.level-card:disabled{opacity:.42;cursor:not-allowed}.level-card .emoji{font-size:25px}.level-card strong{display:block;margin:10px 0 5px}.level-card small{color:var(--muted);line-height:1.5}.level-card .progress{margin-top:10px;color:var(--green);font-size:11px;font-weight:800}
+.game-layout{display:grid;grid-template-columns:minmax(0,1fr) 245px;gap:16px;align-items:start}.game-main{padding:20px}.game-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}.game-title{font-size:20px;font-weight:900}.game-title small{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-top:5px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:18px}.metric{padding:12px 10px;background:#0a1230;border:1px solid var(--line);border-radius:15px;text-align:center}.metric span{display:block;color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase}.metric b{display:block;font-size:20px;margin-top:5px;font-variant-numeric:tabular-nums}.metric b.gold{color:var(--gold)}.timer-track{height:5px;background:#263057;border-radius:9px;overflow:hidden;margin:-6px 0 18px}.timer-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .5s linear}.timer-fill.low{background:linear-gradient(90deg,#ffbc52,#ff5b83)}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.memory-card{position:relative;aspect-ratio: .82;border-radius:15px;perspective:800px;background:transparent;padding:0;min-width:0}.card-inner{position:absolute;inset:0;transition:transform .38s cubic-bezier(.2,.8,.2,1);transform-style:preserve-3d}.memory-card.flipped .card-inner,.memory-card.matched .card-inner{transform:rotateY(180deg)}.card-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:14px;display:grid;place-items:center;border:1px solid #5967c6;overflow:hidden}.card-back{background:linear-gradient(145deg,#273d94,#171e59);box-shadow:inset 0 0 0 4px #6c73ff17,inset 0 0 20px #8a76ff18}.card-back:before{content:"✦";position:absolute;font-size:58px;color:#7188ff20}.card-back span{font-size:clamp(17px,3vw,27px);color:#91a5ff;text-shadow:0 0 20px #7585ff80}.card-front{transform:rotateY(180deg);background:linear-gradient(145deg,#eaf7ff,#cbd9ff);border-color:#fff;color:#111c48;font-size:clamp(23px,4.3vw,46px);box-shadow:0 0 20px #7deaff22}.memory-card.matched .card-front{background:linear-gradient(145deg,#c6ffe9,#67e8c1);border-color:#4cf0bb;box-shadow:0 0 20px #4cf0bb35}.memory-card:not(.matched):hover .card-back{border-color:var(--cyan);box-shadow:0 0 18px #67eaff22}.memory-card:disabled{cursor:default}
+.sidebar{padding:19px}.side-title{font-size:12px;color:var(--muted);font-weight:850;letter-spacing:.12em;margin:0 0 14px}.mission{padding:13px;border-radius:15px;background:#0b1431;border:1px solid var(--line);margin-bottom:10px}.mission strong{display:block;font-size:13px;margin-bottom:5px}.mission small{color:var(--muted);line-height:1.5}.tip{padding:14px;border-radius:15px;background:#29204e;border:1px solid #8b65ed55;color:#e4d9ff;font-size:12px;line-height:1.6;margin-top:14px}.side-actions{display:grid;gap:8px;margin-top:14px}.side-actions button{width:100%;padding:11px;border-radius:12px;background:#121d43;border:1px solid var(--line);text-align:left;font-size:12px}.side-actions button:hover{border-color:var(--cyan)}
+.result-wrap{max-width:650px;margin:30px auto;padding:clamp(24px,5vw,45px);text-align:center}.result-icon{font-size:76px;filter:drop-shadow(0 0 25px #ffca4c70)}.result-wrap h2{font-size:clamp(32px,6vw,48px);margin:8px 0}.result-wrap p{color:var(--muted);line-height:1.7}.result-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:24px 0}.result-stats div{padding:16px 8px;background:#0a1230;border:1px solid var(--line);border-radius:15px}.result-stats span{display:block;color:var(--muted);font-size:11px}.result-stats b{display:block;font-size:24px;margin-top:7px}.result-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.modal-backdrop{position:fixed;inset:0;z-index:5;background:#02040dc9;display:none;place-items:center;padding:20px}.modal-backdrop.open{display:grid}.modal{width:min(430px,100%);padding:25px;background:#111a3b;border:1px solid var(--line);border-radius:22px;box-shadow:0 25px 90px #0009}.modal h2{margin-top:0}.modal p{color:var(--muted);font-size:13px;line-height:1.7}.modal-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#17254e;border:1px solid #6579d9;border-radius:14px;padding:12px 18px;z-index:9;transition:.25s;box-shadow:0 10px 35px #0006}.toast.show{opacity:1;transform:translate(-50%,0)}
+footer{text-align:center;color:#7785b7;font-size:11px;margin-top:28px}
+@media(max-width:850px){.hero{grid-template-columns:1fr}.hero-art{min-height:280px}.orb{width:170px;height:170px;font-size:70px}.float-card{width:62px;height:78px}.game-layout{grid-template-columns:1fr}.sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.side-title{grid-column:1/-1;margin-bottom:0}.tip{margin-top:0}.side-actions{margin-top:0}.mission{margin:0}}
+@media(max-width:580px){.app{width:calc(100% - 18px);padding-top:13px}.brand{font-size:13px}.brand-icon{width:38px;height:38px}.hero-copy{padding:25px;min-height:unset}.hero-art{min-height:235px}.level-grid{grid-template-columns:repeat(2,1fr)}.level-card{min-height:130px;padding:15px}.game-main{padding:12px}.metrics{gap:5px}.metric{padding:10px 3px}.metric b{font-size:17px}.metric span{font-size:9px}.board{gap:6px}.memory-card{border-radius:10px}.card-face{border-radius:10px}.sidebar{grid-template-columns:1fr}.result-stats{gap:6px}.result-stats b{font-size:20px}.section-head{align-items:start;flex-direction:column}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand"><div class="brand-icon">🧠</div><div>MEMORY MASTER<small>TRAIN YOUR BRAIN</small></div></div>
+  <div class="top-actions"><button class="icon-btn" id="soundBtn" aria-label="Дуу асаах эсвэл унтраах" title="Дуу">🔊</button><button class="icon-btn" id="settingsBtn" aria-label="Тохиргоо" title="Тохиргоо">⚙️</button></div>
+</header>
+
+<section id="homeScreen" class="screen active">
+  <div class="hero">
+    <div class="panel hero-copy">
+      <div class="eyebrow">✦ Тархины сорил эхэллээ</div>
+      <h1>MEMORY <span>MASTER</span></h1>
+      <p class="subtitle">Хөзрүүдийг эргүүлж, ижил хосуудыг ол. Ой тогтоолтоо сорьж, түвшин бүрийг даван жинхэнэ Memory Master болоорой!</p>
+      <div class="hero-buttons"><button class="primary" id="continueBtn">▶ &nbsp; ТОГЛОХ</button><button class="secondary" id="levelsBtn">Түвшин сонгох ↗</button></div>
+      <div class="stats-row"><div><b id="homeBest">0</b>Дээд оноо</div><div><b id="homeWins">0</b>Давсан түвшин</div><div><b>20</b>Нийт түвшин</div></div>
+    </div>
+    <div class="panel hero-art" aria-hidden="true"><div class="orb">🧠</div><div class="float-card fc1">🦊</div><div class="float-card fc2">🐼</div><div class="float-card fc3">🦄</div><div class="float-card fc4">🐸</div></div>
+  </div>
+  <div class="section-head"><div><h2>Түвшнээ сонго</h2><p>Алхам бүр шинэ сорил, илүү олон хос.</p></div><button class="secondary" id="allLevelsBtn">Бүх түвшин →</button></div>
+  <div class="level-grid" id="homeLevels"></div>
+</section>
+
+<section id="levelsScreen" class="screen">
+  <div class="section-head"><div><h2>🏆 Түвшин сонгох</h2><p>Түгжээтэй түвшинг нээхийн тулд өмнөх түвшнийг дав.</p></div><button class="secondary" id="backHomeBtn">← Нүүр</button></div>
+  <div class="level-grid" id="allLevels"></div>
+</section>
+
+<section id="gameScreen" class="screen">
+  <div class="game-layout">
+    <div class="panel game-main">
+      <div class="game-top"><div class="game-title" id="gameHeading">Түвшин 1 <small id="gameSubtitle">Энгийн · Ой тогтоолтоо сорь!</small></div><button class="secondary" id="quitBtn">✕ Гарах</button></div>
+      <div class="metrics">
+        <div class="metric"><span>⏱ Хугацаа</span><b id="timeMetric">00:45</b></div>
+        <div class="metric"><span>⭐ Оноо</span><b class="gold" id="scoreMetric">0</b></div>
+        <div class="metric"><span>🃏 Нүүдэл</span><b id="movesMetric">0</b></div>
+        <div class="metric"><span>💎 Хос</span><b id="pairsMetric">0/8</b></div>
+      </div>
+      <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+      <div class="board" id="board" aria-label="Хөзрийн самбар"></div>
+    </div>
+    <aside class="panel sidebar">
+      <h3 class="side-title">ТҮВШНИЙ ЗОРИЛГО</h3>
+      <div class="mission"><strong>🎯 Бүх хосыг ол</strong><small id="goalText">8 хосыг хугацаанд нь олоорой.</small></div>
+      <div class="mission"><strong>⚡ Combo ав</strong><small>Дараалсан зөв хос бүр нэмэлт оноо өгнө.</small></div>
+      <div class="mission"><strong>🌟 3 од цуглуул</strong><small id="starText">Нүүдлээ цөөлж, хугацаагаа хэмнэ.</small></div>
+      <div class="tip" id="tipText">💡 Зөвлөгөө: Хөзрийн байрлалыг тогтоохын тулд эхний эргэлтүүдээ анхааралтай ажиглаарай.</div>
+      <div class="side-actions"><button id="restartBtn">↻ &nbsp; Дахин эхлүүлэх</button><button id="pauseBtn">Ⅱ &nbsp; Түр зогсоох</button><button id="hintBtn">✨ &nbsp; Нэг хосын тусламж</button></div>
+    </aside>
+  </div>
+</section>
+
+<section id="resultScreen" class="screen">
+  <div class="panel result-wrap">
+    <div class="result-icon" id="resultIcon">🏆</div><div class="eyebrow" id="resultEyebrow">ТҮВШИН ДАВАГДЛАА</div>
+    <h2 id="resultTitle">Гайхалтай!</h2><p id="resultMessage">Бүх хосыг оллоо.</p>
+    <div class="result-stats"><div><span>ОНОО</span><b id="resultScore">0</b></div><div><span>ХУГАЦАА</span><b id="resultTime">00:00</b></div><div><span>ОД</span><b id="resultStars">⭐⭐⭐</b></div></div>
+    <div class="result-actions"><button class="primary" id="nextBtn">Дараагийн түвшин →</button><button class="secondary" id="replayBtn">↻ Дахин тоглох</button><button class="secondary" id="resultHomeBtn">⌂ Нүүр</button></div>
+  </div>
+</section>
+<footer>MEMORY MASTER · Үнэгүй browser тоглоом · Ахиц энэ төхөөрөмжид хадгалагдана</footer>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal"><h2 id="modalTitle">⚙️ Тохиргоо</h2><p>Өөрийн тоглох хэв маягт тааруулаарай.</p>
+    <div class="modal-row"><span>Дууны эффект</span><button class="secondary" id="modalSound">Асаалттай</button></div>
+    <div class="modal-row"><span>Хөзөр эргүүлэх хугацаа</span><strong>0.38 сек</strong></div>
+    <div class="modal-row"><span>Ахиц хадгалах</span><strong>Автоматаар ✓</strong></div>
+    <p>Түвшин, дээд оноо болон ахиц таны энэ browser-д хадгалагдана.</p><button class="primary" id="closeModal" style="width:100%">Ойлголоо</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const LEVELS = [
+    {name:"Эхлэл",rows:2,cols:2,time:25,icon:"🌱"},
+    {name:"Халаалт",rows:2,cols:3,time:35,icon:"🍀"},
+    {name:"Энгийн",rows:4,cols:4,time:60,icon:"🧩"},
+    {name:"Анхаарал",rows:4,cols:4,time:55,icon:"🎯"},
+    {name:"Дунд",rows:4,cols:5,time:70,icon:"💠"},
+    {name:"Ой тогтоолт",rows:4,cols:5,time:65,icon:"🦊"},
+    {name:"Түргэн сэтгэхүй",rows:5,cols:6,time:85,icon:"⚡"},
+    {name:"Хурд",rows:5,cols:6,time:80,icon:"🚀"},
+    {name:"Хэцүү",rows:5,cols:6,time:75,icon:"🔥"},
+    {name:"Мэргэжилтэн",rows:5,cols:6,time:70,icon:"💎"},
+    {name:"Тархины дасгал",rows:6,cols:6,time:95,icon:"🧠"},
+    {name:"Сорил",rows:6,cols:6,time:90,icon:"🌀"},
+    {name:"Мастер I",rows:6,cols:6,time:85,icon:"👑"},
+    {name:"Мастер II",rows:6,cols:6,time:80,icon:"🌌"},
+    {name:"Мастер III",rows:6,cols:6,time:75,icon:"☄️"},
+    {name:"Домог",rows:6,cols:6,time:72,icon:"🐉"},
+    {name:"Домог II",rows:6,cols:6,time:68,icon:"🌠"},
+    {name:"Тархины аварга",rows:6,cols:6,time:65,icon:"🏆"},
+    {name:"Grand Master",rows:6,cols:6,time:62,icon:"💫"},
+    {name:"Memory Legend",rows:6,cols:6,time:60,icon:"👑"}
+  ];
+  const EMOJIS = ["🦊","🐼","🐸","🦄","🐙","🐵","🐧","🦋","🐯","🐨","🐰","🐹","🐳","🦖","🐢","🦉","🐝","🐞"];
+  let data = loadData(), level = 0, cards = [], first = null, second = null, lock = false;
+  let timeLeft = 0, totalTime = 0, score = 0, moves = 0, pairs = 0, combo = 0, timer = null, mismatchTimer = null, paused = false, soundOn = true, startedAt = 0;
+  let audioCtx = null, hintUsed = false;
+  function loadData(){try{return Object.assign({unlocked:1,completed:[],bestScore:0,totalWins:0,stars:{},scores:{}},JSON.parse(localStorage.getItem("memoryMasterSave")||"{}"));}catch{return {unlocked:1,completed:[],bestScore:0,totalWins:0,stars:{},scores:{}};}}
+  function saveData(){try{localStorage.setItem("memoryMasterSave",JSON.stringify(data));}catch{} updateHomeStats();}
+  function updateHomeStats(){$("homeBest").textContent=data.bestScore||0;$("homeWins").textContent=data.totalWins||0;}
+  function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  function showScreen(name){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));$(name+"Screen").classList.add("active");window.scrollTo({top:0,behavior:"smooth"});}
+  function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2100);}
+  function playTone(freq=440,duration=.07,type="sine"){if(!soundOn)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(.045,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+duration);}catch{}}
+  function stopTimers(){clearInterval(timer);clearTimeout(mismatchTimer);timer=null;mismatchTimer=null;}
+  function makeLevelCard(i){const l=LEVELS[i],unlocked=i<data.unlocked,stars=data.stars[i]||0,done=data.completed.includes(i);const b=document.createElement("button");b.className="level-card";b.disabled=!unlocked;b.innerHTML=`<span class="emoji">${unlocked?(done?"✅":l.icon):"🔒"}</span><strong>${String(i+1).padStart(2,"0")}. ${l.name}</strong><small>${l.rows} × ${l.cols} · ${l.rows*l.cols/2} хос<br>${fmt(l.time)} хугацаа</small><div class="progress">${unlocked?(done?"★".repeat(stars)+"☆".repeat(3-stars):"НЭЭЛТТЭЙ"):"ӨМНӨХ ТҮВШИНГ ДАВ"}</div>`;b.addEventListener("click",()=>startLevel(i));return b;}
+  function renderLevels(){const home=$("homeLevels"),all=$("allLevels");home.innerHTML="";all.innerHTML="";[0,1,2,3].forEach(i=>home.appendChild(makeLevelCard(i)));LEVELS.forEach((_,i)=>all.appendChild(makeLevelCard(i)));updateHomeStats();}
+  function startLevel(i){stopTimers();level=i;const l=LEVELS[level];timeLeft=l.time;totalTime=l.time;score=0;moves=0;pairs=0;combo=0;first=null;second=null;lock=false;paused=false;hintUsed=false;startedAt=Date.now();cards=[];const count=l.rows*l.cols,pairCount=count/2;const chosen=EMOJIS.slice(0,pairCount);cards=[...chosen,...chosen].map((emoji,index)=>({emoji,id:index,matched:false,flipped:false}));for(let n=cards.length-1;n>0;n--){const j=Math.floor(Math.random()*(n+1));[cards[n],cards[j]]=[cards[j],cards[n]];}$("gameHeading").childNodes[0].textContent=`Түвшин ${level+1} · ${l.name}`;$("gameSubtitle").textContent=`${l.rows}×${l.cols} самбар · ${pairCount} хосыг олоорой`;$("goalText").textContent=`${pairCount} хосыг ${fmt(l.time)} дотор ол.`;$("starText").textContent=`3 од: ${Math.max(1,Math.floor(pairCount*1.35))} буюу түүнээс цөөн нүүдэл + цаг хэмнэх.`;$("tipText").textContent=level<4?"💡 Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой.":"🧠 Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";const board=$("board");board.innerHTML="";board.style.gridTemplateColumns=`repeat(${l.cols},minmax(0,1fr))`;cards.forEach((c,index)=>{const btn=document.createElement("button");btn.className="memory-card";btn.setAttribute("aria-label","Нуугдсан хөзөр");btn.innerHTML=`<span class="card-inner"><span class="card-face card-back"><span>✦</span></span><span class="card-face card-front">${c.emoji}</span></span>`;btn.addEventListener("click",()=>flipCard(index,btn));c.element=btn;board.appendChild(btn);});updateMetrics();showScreen("game");timer=setInterval(tick,1000);}
+  function flipCard(i,btn){if(paused||lock||!timer||cards[i].matched||cards[i].flipped)return;if(!startedAt)startedAt=Date.now();cards[i].flipped=true;btn.classList.add("flipped");btn.setAttribute("aria-label",cards[i].emoji);playTone(520,.05);if(first===null){first=i;return;}second=i;moves++;lock=true;const a=cards[first],b=cards[second];if(a.emoji===b.emoji){a.matched=b.matched=true;a.element.classList.add("matched");b.element.classList.add("matched");a.element.disabled=b.element.disabled=true;pairs++;combo++;score+=100+Math.max(0,combo-1)*25;playTone(760,.12,"triangle");first=second=null;lock=false;updateMetrics();if(pairs===cards.length/2){finish(true);return;}toast(combo>1?`🔥 ${combo} дараалсан хос! +${100+(combo-1)*25}`:"✨ Зөв хос! +100");}else{combo=0;mismatchTimer=setTimeout(()=>{a.flipped=b.flipped=false;a.element.classList.remove("flipped");b.element.classList.remove("flipped");a.element.setAttribute("aria-label","Нуугдсан хөзөр");b.element.setAttribute("aria-label","Нуугдсан хөзөр");first=second=null;lock=false;},750);updateMetrics();}}
+  function updateMetrics(){$("timeMetric").textContent=fmt(timeLeft);$("scoreMetric").textContent=score;$("movesMetric").textContent=moves;$("pairsMetric").textContent=`${pairs}/${cards.length/2||0}`;$("timerFill").style.width=(timeLeft/totalTime*100)+"%";$("timerFill").classList.toggle("low",timeLeft<=Math.max(10,totalTime*.22));}
+  function tick(){if(paused)return;timeLeft--;updateMetrics();if(timeLeft<=0){timeLeft=0;updateMetrics();finish(false);}}
+  function calcStars(){const pairCount=cards.length/2,eff=moves/Math.max(1,pairCount);let stars=1;if(timeLeft>totalTime*.25&&eff<=2.1)stars=3;else if(timeLeft>totalTime*.1&&eff<=3.2)stars=2;return stars;}
+  function finish(won){stopTimers();lock=true;paused=false;const elapsed=totalTime-timeLeft;let stars=won?calcStars():0;if(won){score+=timeLeft*5;score+=Math.max(0,Math.ceil((cards.length/2)*2.5-moves))*15;data.bestScore=Math.max(data.bestScore,score);data.unlocked=Math.max(data.unlocked,Math.min(LEVELS.length,level+2));if(!data.completed.includes(level)){data.completed.push(level);data.totalWins++;}data.stars[level]=Math.max(data.stars[level]||0,stars);data.scores[level]=Math.max(data.scores[level]||0,score);saveData();playTone(880,.22,"triangle");}else{playTone(180,.3,"sawtooth");}
+    $("resultIcon").textContent=won?(stars===3?"🏆":stars===2?"🌟":"🎉"):"⏳";$("resultEyebrow").textContent=won?"ТҮВШИН ДАВАГДЛАА":"ДАХИН ОРОЛДООД ҮЗ!";$("resultTitle").textContent=won?(stars===3?"Гайхалтай!":stars===2?"Маш сайн!":"Сайн байна!"):"Хугацаа дууслаа";$("resultMessage").textContent=won?`${LEVELS[level].name} түвшнийг амжилттай давлаа! ${level===LEVELS.length-1?"Чи жинхэнэ Memory Legend боллоо!":"Дараагийн түвшин чамайг хүлээж байна."}`:"Бага зэрэг амраад дахин оролдоорой. Хосуудын байрлалыг тогтоох нь амжилтын түлхүүр!";$("resultScore").textContent=score;$("resultTime").textContent=fmt(elapsed);$("resultStars").textContent=won?"⭐".repeat(stars)+"☆".repeat(3-stars):"—";$("nextBtn").style.display=won&&level<LEVELS.length-1?"inline-block":"none";if(won&&level===LEVELS.length-1)$("nextBtn").style.display="none";renderLevels();showScreen("result");}
+  function restart(){startLevel(level);}
+  function quit(){stopTimers();showScreen("home");renderLevels();}
+  function togglePause(){if(!timer)return;paused=!paused;$("pauseBtn").textContent=paused?"▶ Үргэлжлүүлэх":"Ⅱ Түр зогсоох";if(paused){clearInterval(timer);timer=null;toast("Тоглоом түр зогслоо");}else{timer=setInterval(tick,1000);toast("Үргэлжлүүллээ");}}
+  function hint(){if(paused||lock||!timer)return;if(hintUsed){toast("Энэ түвшинд тусламжийг нэг удаа ашиглана.");return;}const unmatched=cards.map((c,i)=>({...c,index:i})).filter(c=>!c.matched);let pair=null;for(let i=0;i<unmatched.length;i++){for(let j=i+1;j<unmatched.length;j++){if(unmatched[i].emoji===unmatched[j].emoji){pair=[unmatched[i],unmatched[j]];break;}}if(pair)break;}if(!pair)return;hintUsed=true;score=Math.max(0,score-50);pair.forEach(c=>{c.element.classList.add("flipped");});playTone(660,.1);setTimeout(()=>pair.forEach(c=>{if(!c.matched)c.element.classList.remove("flipped");}),850);updateMetrics();toast("✨ Тусламж ашиглалаа: -50 оноо");}
+  $("continueBtn").addEventListener("click",()=>startLevel(Math.max(0,Math.min(data.unlocked-1,LEVELS.length-1))));
+  $("levelsBtn").addEventListener("click",()=>showScreen("levels"));$("allLevelsBtn").addEventListener("click",()=>showScreen("levels"));$("backHomeBtn").addEventListener("click",()=>showScreen("home"));
+  $("quitBtn").addEventListener("click",quit);$("restartBtn").addEventListener("click",restart);$("pauseBtn").addEventListener("click",togglePause);$("hintBtn").addEventListener("click",hint);
+  $("nextBtn").addEventListener("click",()=>startLevel(Math.min(level+1,LEVELS.length-1)));$("replayBtn").addEventListener("click",restart);$("resultHomeBtn").addEventListener("click",()=>{showScreen("home");renderLevels();});
+  function toggleSound(){soundOn=!soundOn;$("soundBtn").textContent=soundOn?"🔊":"🔇";$("modalSound").textContent=soundOn?"Асаалттай":"Унтраалттай";if(soundOn)playTone(600,.08);}
+  $("soundBtn").addEventListener("click",toggleSound);$("modalSound").addEventListener("click",toggleSound);$("settingsBtn").addEventListener("click",()=>$("modalBackdrop").classList.add("open"));$("closeModal").addEventListener("click",()=>$("modalBackdrop").classList.remove("open"));$("modalBackdrop").addEventListener("click",e=>{if(e.target===$("modalBackdrop"))$("modalBackdrop").classList.remove("open");});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("modalBackdrop").classList.remove("open");if($("gameScreen").classList.contains("active"))togglePause();}});
+  renderLevels();
+})();
+</script>
+</body>
+</html>
