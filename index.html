@@ -83,8 +83,8 @@
               <div><b>20</b>Нийт түвшин</div>
             </div>
           </div>
-          <div class="panel hero-art" aria-hidden="true">
-            <div class="orb">
+          <div class="panel hero-art" id="heroArt" aria-hidden="true">
+            <div class="orb" id="heroOrb">
               <span class="orb-glow"></span>
               <span class="orb-emoji">🧠</span>
             </div>
@@ -92,13 +92,24 @@
             <span class="spark s2">✦</span>
             <span class="spark s3">✦</span>
             <span class="spark s4">✦</span>
-            <div class="float-card fc1">🦊</div>
-            <div class="float-card fc2">🐼</div>
-            <div class="float-card fc3">🦄</div>
-            <div class="float-card fc4">🐸</div>
+            <div class="float-card fc1">🐴</div>
+            <div class="float-card fc2">🦅</div>
+            <div class="float-card fc3">🐺</div>
+            <div class="float-card fc4">🐫</div>
             <div class="good-luck">Good Luck! ✧</div>
           </div>
         </div>
+
+        <div class="panel daily-banner">
+          <div class="daily-icon"><span data-icon="calendar"></span></div>
+          <div class="daily-text">
+            <strong>Өдрийн сорилт</strong>
+            <small id="dailyBannerSub">Өдөр бүр шинэ 10 хос — дараалан тоглож streak-ээ өсгө!</small>
+          </div>
+          <div class="daily-streak"><span data-icon="flame"></span><span id="dailyStreakNum">0</span> өдөр</div>
+          <button class="primary" id="dailyPlayBtn"><span data-icon="play"></span> Тоглох</button>
+        </div>
+
         <div class="section-head">
           <div>
             <h2>Түвшнээ сонго</h2>
@@ -131,6 +142,10 @@
       <section id="gameScreen" class="screen">
         <div class="game-layout">
           <div class="panel game-main">
+            <div class="mascot-wrap" aria-hidden="true">
+              <div class="mascot-bubble" id="mascotBubble"></div>
+              <div class="mascot-face" id="mascotFace">🧠</div>
+            </div>
             <div class="game-top">
               <div class="game-top-left">
                 <button
@@ -148,6 +163,9 @@
                 </div>
               </div>
               <div class="pill-row">
+                <div class="pill combo-badge" id="comboBadge">
+                  <span data-icon="flame"></span><b id="comboCount">x2</b>
+                </div>
                 <div class="pill">
                   <span data-icon="timer"></span><b id="timeMetric">00:45</b>
                 </div>
@@ -358,7 +376,7 @@
           class="primary js-modal-close"
           style="width: 100%; margin-top: 14px"
         >
-          <span></span> Хаах
+          Хаах
         </button>
       </div>
     </div>
@@ -437,6 +455,8 @@
     <script src="js/levels.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/scoring.js"></script>
+    <script src="js/rng.js"></script>
+    <script src="js/tilt.js"></script>
     <script src="js/game.js"></script>
   </body>
 </html>

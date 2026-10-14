@@ -136,10 +136,11 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .stats-row{display:flex;gap:20px;flex-wrap:wrap;margin-top:26px;color:var(--muted);font-size:12px;justify-content:center}
 .stats-row b{color:var(--text);display:block;font-size:19px;margin-bottom:3px;font-family:var(--font-display)}
 
-.hero-art{display:flex;align-items:center;justify-content:center;min-height:360px;position:relative;overflow:hidden}
+.hero-art{display:flex;align-items:center;justify-content:center;min-height:360px;position:relative;overflow:hidden;perspective:1200px}
 .orb{width:220px;height:220px;border-radius:50%;display:grid;place-items:center;
   background:radial-gradient(circle at 35% 25%,#394fa8,#161e55 60%,#0b102b);
   border:1px solid #8ca2ff70;box-shadow:0 0 80px #745aff3d,inset 0 0 40px #68dfff22;font-size:88px;position:relative;
+  transform:perspective(800px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .6s cubic-bezier(.2,.8,.2,1);
   animation:orbPulse 4.2s ease-in-out infinite}
 :root[data-theme="light"] .orb{background:radial-gradient(circle at 35% 25%,#c9d7ff,#8ea3ff 60%,#5a6fe0);border-color:#5a6fe070}
 .orb:before,.orb:after{content:"";position:absolute;border:1px solid #7f88ff65;border-radius:50%;inset:-24px;
@@ -179,11 +180,15 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .section-head p{margin:5px 0 0;color:var(--muted);font-size:13px;font-weight:600}
 
 /* ---- Level cards ---- */
-.level-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.level-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;perspective:1600px}
 .level-card{padding:18px;border-radius:20px;background:linear-gradient(150deg,var(--panel-grad1),var(--panel-grad2));
-  border:1px solid var(--line);text-align:left;transition:.2s;min-height:150px;position:relative;overflow:hidden}
-.level-card:before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:var(--tier-color,var(--purple))}
-.level-card:hover:not(:disabled){transform:translateY(-4px);border-color:var(--tier-color,var(--purple));box-shadow:0 10px 30px #7e54ff20}
+  border:1px solid var(--line);text-align:left;min-height:150px;position:relative;overflow:hidden;
+  transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(0px);
+  transition:transform .4s cubic-bezier(.2,.8,.2,1),border-color .2s,box-shadow .2s}
+.level-card:before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:var(--tier-color,var(--purple));z-index:1}
+.level-card:hover:not(:disabled){transition:transform .08s linear,border-color .2s,box-shadow .2s;
+  transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(14px);
+  border-color:var(--tier-color,var(--purple));box-shadow:0 16px 34px #7e54ff2c}
 .level-card:disabled{opacity:.42;cursor:not-allowed}
 .level-card .tier-pill{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:999px;
   background:color-mix(in srgb, var(--tier-color,var(--purple)) 22%, transparent);color:var(--tier-color,var(--purple));margin-bottom:8px}
@@ -198,7 +203,7 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 
 /* ---- Game screen ---- */
 .game-layout{display:grid;grid-template-columns:minmax(0,1fr) 255px;gap:16px;align-items:start}
-.game-main{padding:20px}
+.game-main{padding:20px;position:relative}
 .game-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .game-top-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .back-circle{width:42px;height:42px;border-radius:50%;background:var(--input-bg);border:1px solid var(--line);
@@ -221,10 +226,14 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .timer-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .5s linear}
 .timer-fill.low{background:linear-gradient(90deg,#ffbc52,#ff5b83)}
 
-.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.memory-card{position:relative;aspect-ratio:.82;border-radius:15px;perspective:800px;background:transparent;padding:0;min-width:0}
-.card-inner{position:absolute;inset:0;transition:transform .38s cubic-bezier(.2,.8,.2,1);transform-style:preserve-3d}
-.memory-card.flipped .card-inner,.memory-card.matched .card-inner{transform:rotateY(180deg)}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;perspective:1400px;position:relative}
+.memory-card{position:relative;aspect-ratio:.82;border-radius:15px;perspective:800px;background:transparent;padding:0;min-width:0;
+  transform-style:preserve-3d;
+  transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.memory-card:hover{transition:transform .08s linear}
+.card-inner{position:absolute;inset:0;transition:transform .5s cubic-bezier(.34,1.3,.4,1);transform-style:preserve-3d}
+.memory-card.flipped .card-inner,.memory-card.matched .card-inner{transform:rotateY(180deg) translateZ(2px)}
 .card-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:14px;display:grid;place-items:center;
   border:1px solid var(--card-back-line);overflow:hidden}
 .card-back{background:linear-gradient(145deg,var(--card-back1),var(--card-back2));
@@ -234,10 +243,48 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .card-front{transform:rotateY(180deg);background:linear-gradient(145deg,var(--card-front1),var(--card-front2));
   border-color:#fff;color:var(--card-front-text);font-size:clamp(30px,5.2vw,50px);box-shadow:0 0 20px #7deaff22}
 .memory-card.matched .card-front{background:linear-gradient(145deg,#c6ffe9,#67e8c1);border-color:#4cf0bb;box-shadow:0 0 20px #4cf0bb35}
-.memory-card:not(.matched):hover .card-back{border-color:var(--cyan);box-shadow:0 0 18px #67eaff22}
+.memory-card:not(.matched):hover .card-back{border-color:var(--cyan);box-shadow:0 0 22px #67eaff38}
 .memory-card:disabled{cursor:default}
+.memory-card.matched{animation:cardPop .5s cubic-bezier(.34,1.56,.64,1)}
+@keyframes cardPop{0%{transform:perspective(900px) scale(1)}45%{transform:perspective(900px) scale(1.14) translateY(-6px)}100%{transform:perspective(900px) scale(1)}}
 .memory-card.shake .card-inner{animation:shake .4s}
 @keyframes shake{0%,100%{transform:translateX(0) rotateY(180deg)}25%{transform:translateX(-6px) rotateY(180deg)}75%{transform:translateX(6px) rotateY(180deg)}}
+
+/* ---- Match particle burst (board-local celebration, separate from the win-screen confetti) ---- */
+.particle-layer{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2}
+.particle{position:absolute;width:7px;height:7px;border-radius:50%;animation:particleBurst .7s ease-out forwards}
+@keyframes particleBurst{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--px),var(--py)) scale(.3)}}
+
+/* ---- Combo streak badge ---- */
+.combo-badge{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8a4c,#ff4d6d);
+  color:#fff;border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px;
+  transform:scale(0);opacity:0;transition:transform .35s cubic-bezier(.34,1.56,.64,1),opacity .25s}
+.combo-badge.show{transform:scale(1);opacity:1}
+.combo-badge.mega{background:linear-gradient(135deg,#ffd35a,#ff4d6d,#9c72ff);animation:comboMega 1s ease-in-out infinite}
+.combo-badge .icon{width:14px;height:14px}
+@keyframes comboMega{0%,100%{filter:brightness(1)}50%{filter:brightness(1.35)}}
+
+/* ---- Mascot reaction bubble ---- */
+.mascot-wrap{position:absolute;top:10px;right:10px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none}
+.mascot-face{font-size:30px;filter:drop-shadow(0 4px 10px #0006);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.mascot-face.bump{transform:scale(1.25) rotate(-6deg)}
+.mascot-bubble{max-width:170px;background:var(--modal-bg);border:1px solid var(--line);color:var(--text);
+  font-size:11.5px;font-weight:700;padding:8px 11px;border-radius:12px 12px 2px 12px;box-shadow:0 8px 20px #0005;
+  opacity:0;transform:translateY(6px) scale(.9);transition:opacity .25s,transform .25s}
+.mascot-bubble.show{opacity:1;transform:translateY(0) scale(1)}
+
+/* ---- Daily Challenge banner ---- */
+.daily-banner{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 22px;margin:20px 0;
+  background:linear-gradient(120deg,color-mix(in srgb, var(--gold) 16%, var(--panel-grad1)),var(--panel-grad2));
+  border:1px solid color-mix(in srgb, var(--gold) 40%, var(--line))}
+.daily-banner .daily-icon{display:flex;width:52px;height:52px;flex-shrink:0;border-radius:16px;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--gold) 22%, transparent);color:var(--gold)}
+.daily-banner .daily-icon .icon{width:26px;height:26px}
+.daily-banner .daily-text{flex:1;min-width:180px}
+.daily-banner .daily-text strong{display:block;font-family:var(--font-display);font-size:16px;margin-bottom:3px}
+.daily-banner .daily-text small{color:var(--muted);font-weight:600}
+.daily-banner .daily-streak{display:flex;align-items:center;gap:6px;color:var(--gold);font-weight:800;font-size:13px}
+.daily-banner .daily-streak .icon{width:15px;height:15px}
 
 .sidebar{padding:19px}
 .side-title{font-size:12px;color:var(--muted);font-weight:800;letter-spacing:.1em;margin:0 0 14px;font-family:var(--font-display)}
@@ -414,6 +461,23 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:28px;paddi
   .level-card:hover:not(:disabled),.secondary:hover,.primary:hover,.mini-btn:hover,.icon-btn:hover,.side-actions button:hover{
     transform:none;
   }
+  /* The pointer-follow tilt never runs on touch (js/tilt.js gates on hover+fine
+     pointer), so drop the idle 3D transform/compositing cost it would otherwise
+     still pay on every card — keeps the flip fast without the tilt payoff. */
+  .memory-card{transform:none;transform-style:flat}
+  .level-card{transform:none}
+  .level-card:hover:not(:disabled){transform:none}
+  .orb{transform:none}
+}
+@media(max-width:640px){
+  /* Blur compositing is one of the heaviest things a phone GPU does — trim it
+     down instead of dropping the glass look entirely. */
+  .panel{backdrop-filter:blur(6px)}
+  /* Fewer always-on decorative animations in the hero = less idle GPU work
+     on the first screen a phone sees. */
+  .spark.s3,.spark.s4{display:none}
+  .orb:after{animation:none;display:none}
+  .orb:before{animation-duration:24s}
 }
 .modal{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 @media(prefers-reduced-motion:reduce){

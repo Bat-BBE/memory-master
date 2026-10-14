@@ -8,13 +8,19 @@
   var Storage = window.MM.Storage;
   var Scoring = window.MM.Scoring;
   var Icon = window.MM.Icon;
+  var attachTilt = window.MM.attachTilt;
+  var seededShuffle = window.MM.seededShuffle;
+  var todayKey = window.MM.todayKey;
+  var daysBetweenKeys = window.MM.daysBetweenKeys;
 
   var $ = function (id) { return document.getElementById(id); };
 
+  var DAILY_LEVEL = { name: "Өдрийн сорилт", tier: "Өдрийн сорилт", tierColorVar: "--gold", tierIcon: "calendar", rows: 4, cols: 5, time: 70 };
+
   var data = Storage.load();
-  var level = 0, cards = [], first = null, second = null, lock = false;
+  var level = 0, cards = [], first = null, second = null, lock = false, isDailyRound = false;
   var timeLeft = 0, totalTime = 0, score = 0, moves = 0, pairs = 0, combo = 0;
-  var timer = null, mismatchTimer = null, hintTimer = null, paused = false, startedAt = 0, hintUsed = false;
+  var timer = null, mismatchTimer = null, hintTimer = null, mascotTimer = null, paused = false, startedAt = 0, hintUsed = false;
   var audioCtx = null;
 
   /* ---------- helpers ---------- */
@@ -61,6 +67,56 @@
     return "--tier-color:var(" + level.tierColorVar + ")";
   }
 
+  /* ---------- mascot / combo / particles (feel-good feedback) ---------- */
+  function mascotSay(face, text, bump) {
+    var faceEl = $("mascotFace"), bubbleEl = $("mascotBubble");
+    if (!faceEl || !bubbleEl) return;
+    faceEl.textContent = face;
+    if (bump) {
+      faceEl.classList.remove("bump");
+      void faceEl.offsetWidth; // restart the bump animation even if it's already mid-play
+      faceEl.classList.add("bump");
+    }
+    bubbleEl.textContent = text;
+    bubbleEl.classList.add("show");
+    clearTimeout(mascotTimer);
+    mascotTimer = setTimeout(function () { bubbleEl.classList.remove("show"); }, 1700);
+  }
+
+  function updateComboBadge() {
+    var el = $("comboBadge");
+    if (!el) return;
+    if (combo > 1) {
+      $("comboCount").textContent = "x" + combo;
+      el.classList.add("show");
+      el.classList.toggle("mega", combo >= 4);
+    } else {
+      el.classList.remove("show", "mega");
+    }
+  }
+
+  function isSmallScreen() { return window.innerWidth <= 640; }
+
+  function burstAt(el) {
+    var board = $("board"), layer = $("particleLayer");
+    if (!board || !layer || !el) return;
+    var br = board.getBoundingClientRect(), er = el.getBoundingClientRect();
+    var cx = er.left - br.left + er.width / 2, cy = er.top - br.top + er.height / 2;
+    var colors = ["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"];
+    var count = isSmallScreen() ? 6 : 10;
+    for (var k = 0; k < count; k++) {
+      var p = document.createElement("span");
+      p.className = "particle";
+      var ang = Math.random() * Math.PI * 2, dist = 26 + Math.random() * 30;
+      p.style.left = cx + "px"; p.style.top = cy + "px";
+      p.style.background = colors[k % colors.length];
+      p.style.setProperty("--px", Math.cos(ang) * dist + "px");
+      p.style.setProperty("--py", Math.sin(ang) * dist + "px");
+      layer.appendChild(p);
+      (function (piece) { setTimeout(function () { piece.remove(); }, 720); })(p);
+    }
+  }
+
   /* ---------- persistence / stats ---------- */
   function save() { Storage.save(data); updateHomeStats(); }
 
@@ -89,6 +145,7 @@
       '<small>' + l.rows + ' × ' + l.cols + ' · ' + pairCount + ' хос<br>' + fmt(l.time) + ' хугацаа</small>' +
       '<div class="progress">' + (unlocked ? (done ? "★".repeat(stars) + "☆".repeat(3 - stars) : "НЭЭЛТТЭЙ") : "ӨМНӨХ ТҮВШИНГ ДАВ") + '</div>';
     b.addEventListener("click", function () { startLevel(i); });
+    attachTilt(b, { maxDeg: 8 });
     return b;
   }
 
@@ -100,11 +157,32 @@
     updateHomeStats();
   }
 
+  function renderDailyBanner() {
+    var btn = $("dailyPlayBtn"), streakEl = $("dailyStreakNum"), subEl = $("dailyBannerSub");
+    if (!btn) return;
+    var d = data.daily || { streak: 0, lastDate: null, bestScore: 0 };
+    var playedToday = d.lastDate === todayKey();
+    streakEl.textContent = d.streak || 0;
+    subEl.textContent = playedToday
+      ? "Өнөөдрийн сорилтыг дуусгалаа! Дахин тоглож оноогоо сайжруулж болно."
+      : "Өдөр бүр шинэ 10 хос — дараалан тоглож streak-ээ өсгө!";
+    btn.innerHTML = Icon("play") + " " + (playedToday ? "Дахин тоглох" : "Тоглох");
+  }
+
   /* ---------- game flow ---------- */
   function startLevel(i) {
-    stopTimers();
+    isDailyRound = false;
     level = i;
-    var l = LEVELS[level];
+    beginRound(LEVELS[i]);
+  }
+
+  function startDaily() {
+    isDailyRound = true;
+    beginRound(DAILY_LEVEL);
+  }
+
+  function beginRound(l) {
+    stopTimers();
     timeLeft = l.time; totalTime = l.time;
     score = 0; moves = 0; pairs = 0; combo = 0;
     first = null; second = null; lock = false; paused = false; hintUsed = false;
@@ -112,15 +190,20 @@
 
     var pairCount = (l.rows * l.cols) / 2;
     var chosen = EMOJIS.slice(0, pairCount);
-    cards = [].concat(chosen, chosen).map(function (emoji, index) {
+    var deck = [].concat(chosen, chosen).map(function (emoji, index) {
       return { emoji: emoji, id: index, matched: false, flipped: false };
     });
-    for (var n = cards.length - 1; n > 0; n--) {
-      var j = Math.floor(Math.random() * (n + 1));
-      var tmp = cards[n]; cards[n] = cards[j]; cards[j] = tmp;
-    }
+    // The Daily Challenge uses a date-seeded shuffle so every attempt that same
+    // calendar day lands on the identical layout; normal levels stay random.
+    cards = isDailyRound ? seededShuffle(deck, todayKey()) : (function () {
+      for (var n = deck.length - 1; n > 0; n--) {
+        var j = Math.floor(Math.random() * (n + 1));
+        var tmp = deck[n]; deck[n] = deck[j]; deck[j] = tmp;
+      }
+      return deck;
+    })();
 
-    $("levelBadgeName").textContent = String(level + 1).padStart(2, "0") + ". " + l.name;
+    $("levelBadgeName").textContent = isDailyRound ? l.name : (String(level + 1).padStart(2, "0") + ". " + l.name);
     $("levelBadgeSub").textContent = l.rows + "×" + l.cols + " самбар · " + pairCount + " хос";
     var tierTag = $("levelTierTag");
     tierTag.textContent = l.tier;
@@ -129,9 +212,11 @@
     var threeStarMoves = Math.max(pairCount, Math.floor(pairCount * Scoring.STAR_THRESHOLDS.threeStarMoveRatio));
     var threeStarTimePct = Math.round(Scoring.STAR_THRESHOLDS.threeStarTimeRatio * 100);
     $("starText").textContent = "3 од: " + threeStarMoves + " буюу түүнээс цөөн нүүдэл хийж, хугацааны дээш " + threeStarTimePct + "%-ийг үлдээвэл.";
-    $("tipText").textContent = level < 4
-      ? "Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
-      : "Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";
+    $("tipText").textContent = isDailyRound
+      ? "Өдрийн сорилт: энэ хувилбарыг өнөөдөр бүгд адилхан тоглоно!"
+      : (level < 4
+        ? "Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
+        : "Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.");
 
     var board = $("board");
     board.innerHTML = "";
@@ -144,10 +229,17 @@
       btn.addEventListener("click", function () { flipCard(index, btn); });
       c.element = btn;
       board.appendChild(btn);
+      attachTilt(btn, { maxDeg: 14, isDisabled: function () { return cards[index].flipped || cards[index].matched; } });
     });
+    var particleLayer = document.createElement("div");
+    particleLayer.className = "particle-layer";
+    particleLayer.id = "particleLayer";
+    board.appendChild(particleLayer);
 
     $("pauseIcon").innerHTML = Icon("pause");
     $("pauseLabel").textContent = "Түр зогсоох";
+    updateComboBadge();
+    mascotSay("🧠", "Бэлэн үү?", false);
     updateMetrics();
     showScreen("game");
     timer = setInterval(tick, 1000);
@@ -173,12 +265,18 @@
       var gained = Scoring.pairScore(combo);
       score += gained;
       playTone(760, 0.12, "triangle");
+      burstAt(a.element); burstAt(b.element);
+      updateComboBadge();
       first = second = null; lock = false;
       updateMetrics();
       if (pairs === cards.length / 2) { finish(true); return; }
+      if (combo > 1) { mascotSay("🤩", combo + " дараалаа!", true); }
+      else { mascotSay("😊", "Сайн байна!", true); }
       toast(combo > 1 ? combo + " дараалсан хос! +" + gained : "Зөв хос! +" + gained, combo > 1 ? "flame" : "sparkles");
     } else {
       combo = 0;
+      updateComboBadge();
+      mascotSay("🤔", "Дахиад оролдооч", false);
       a.element.classList.add("shake"); b.element.classList.add("shake");
       mismatchTimer = setTimeout(function () {
         a.flipped = b.flipped = false;
@@ -213,34 +311,52 @@
     var elapsed = totalTime - timeLeft;
     var pairCount = cards.length / 2;
     var stars = won ? Scoring.calcStars(moves, pairCount, timeLeft, totalTime) : 0;
+    var streakMsg = "";
 
     if (won) {
       score += Scoring.timeBonus(timeLeft);
       score += Scoring.efficiencyBonus(moves, pairCount);
-      data.bestScore = Math.max(data.bestScore, score);
-      data.unlocked = Math.max(data.unlocked, Math.min(LEVELS.length, level + 2));
-      if (!data.completed.includes(level)) { data.completed.push(level); data.totalWins++; }
-      data.stars[level] = Math.max(data.stars[level] || 0, stars);
-      data.scores[level] = Math.max(data.scores[level] || 0, score);
+
+      if (isDailyRound) {
+        var today = todayKey();
+        if (data.daily.lastDate !== today) {
+          var gap = data.daily.lastDate ? daysBetweenKeys(data.daily.lastDate, today) : null;
+          data.daily.streak = (gap === 1) ? (data.daily.streak + 1) : 1;
+          data.daily.lastDate = today;
+        }
+        data.daily.bestScore = Math.max(data.daily.bestScore || 0, score);
+        streakMsg = " " + data.daily.streak + " өдөр дараалан тогложээ!";
+      } else {
+        data.bestScore = Math.max(data.bestScore, score);
+        data.unlocked = Math.max(data.unlocked, Math.min(LEVELS.length, level + 2));
+        if (!data.completed.includes(level)) { data.completed.push(level); data.totalWins++; }
+        data.stars[level] = Math.max(data.stars[level] || 0, stars);
+        data.scores[level] = Math.max(data.scores[level] || 0, score);
+      }
       save();
       playTone(880, 0.22, "triangle");
+      mascotSay(stars === 3 ? "🏆" : stars === 2 ? "🌟" : "🎉", isDailyRound ? "Өдрийн сорилт!" : "Чи ялгуулаа!", true);
     } else {
       playTone(180, 0.3, "sawtooth");
+      mascotSay("😮", "Дахин оролдоё", false);
     }
 
     $("resultIcon").innerHTML = Icon(won ? (stars === 3 ? "trophy" : stars === 2 ? "star" : "sparkles") : "hourglass");
-    $("resultEyebrow").textContent = won ? "ТҮВШИН ДАВАГДЛАА" : "ДАХИН ОРОЛДООД ҮЗ!";
+    $("resultEyebrow").textContent = won ? (isDailyRound ? "ӨДРИЙН СОРИЛТ ДАВАГДЛАА" : "ТҮВШИН ДАВАГДЛАА") : "ДАХИН ОРОЛДООД ҮЗ!";
     $("resultTitle").textContent = won ? (stars === 3 ? "Гайхалтай!" : stars === 2 ? "Маш сайн!" : "Сайн байна!") : "Хугацаа дууслаа";
     $("resultMessage").textContent = won
-      ? LEVELS[level].name + " түвшнийг амжилттай давлаа! " + (level === LEVELS.length - 1 ? "Чи жинхэнэ Memory Legend боллоо!" : "Дараагийн түвшин чамайг хүлээж байна.")
+      ? (isDailyRound
+        ? "Өнөөдрийн сорилтыг амжилттай дууслаа!" + streakMsg
+        : LEVELS[level].name + " түвшнийг амжилттай давлаа! " + (level === LEVELS.length - 1 ? "Чи жинхэнэ Memory Legend боллоо!" : "Дараагийн түвшин чамайг хүлээж байна."))
       : "Бага зэрэг амраад дахин оролдоорой. Хосуудын байрлалыг тогтоох нь амжилтын түлхүүр!";
     $("resultScore").textContent = score;
     $("resultTime").textContent = fmt(elapsed);
     $("resultStars").textContent = won ? "★".repeat(stars) + "☆".repeat(3 - stars) : "—";
-    $("nextBtn").style.display = (won && level < LEVELS.length - 1) ? "inline-block" : "none";
+    $("nextBtn").style.display = (won && !isDailyRound && level < LEVELS.length - 1) ? "inline-block" : "none";
 
     if (won && stars >= 2) fireConfetti();
     renderLevels();
+    renderDailyBanner();
     showScreen("result");
   }
 
@@ -248,7 +364,7 @@
     var layer = $("confettiLayer");
     layer.innerHTML = "";
     var colors = ["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"];
-    var count = 46;
+    var count = isSmallScreen() ? 24 : 46;
     for (var k = 0; k < count; k++) {
       var piece = document.createElement("span");
       piece.className = "confetti-piece";
@@ -263,8 +379,8 @@
     setTimeout(function () { layer.innerHTML = ""; }, 3200);
   }
 
-  function restart() { startLevel(level); }
-  function quit() { stopTimers(); showScreen("home"); renderLevels(); }
+  function restart() { if (isDailyRound) { startDaily(); } else { startLevel(level); } }
+  function quit() { stopTimers(); showScreen("home"); renderLevels(); renderDailyBanner(); }
 
   function togglePause() {
     if (!timer && !paused) return;
@@ -287,6 +403,7 @@
     }
     if (!pair) return;
     hintUsed = true;
+    mascotSay("💡", "Энд хараарай!", true);
     lock = true; // block real picks while the hint is peeking, so a tap on a hinted
                  // card can't become the player's real "first" pick mid-reveal and
                  // then get its flipped state silently wiped by the cleanup below.
@@ -380,7 +497,8 @@
 
   $("nextBtn").addEventListener("click", function () { startLevel(Math.min(level + 1, LEVELS.length - 1)); });
   $("replayBtn").addEventListener("click", restart);
-  $("resultHomeBtn").addEventListener("click", function () { showScreen("home"); renderLevels(); });
+  $("resultHomeBtn").addEventListener("click", function () { showScreen("home"); renderLevels(); renderDailyBanner(); });
+  $("dailyPlayBtn").addEventListener("click", startDaily);
 
   $("soundBtn").addEventListener("click", function () { applySound(!data.soundOn); });
   $("soundToggle").addEventListener("click", function () { applySound(!data.soundOn); });
@@ -421,6 +539,8 @@
   $("soundToggle").classList.toggle("on", !!data.soundOn);
   $("volumeRange").value = Math.round((typeof data.volume === "number" ? data.volume : 0.7) * 100);
   $("volumeLabel").textContent = Math.round((typeof data.volume === "number" ? data.volume : 0.7) * 100) + "%";
+  attachTilt($("heroArt"), { target: $("heroOrb"), maxDeg: 10 });
 
   renderLevels();
+  renderDailyBanner();
 })();

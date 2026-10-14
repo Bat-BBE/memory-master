@@ -14,7 +14,9 @@
   };
 
   // Card-face glyphs stay colorful emoji on purpose — variety and color help kids remember pairs.
-  var EMOJIS = ["🦊","🐼","🐸","🦄","🐙","🐵","🐧","🦋","🐯","🐨","🐰","🐹","🐳","🦖","🐢","🦉","🐝","🐞"];
+  // Mongolian steppe/nomadic theme: horse, eagle, camel, livestock, ger, Naadam's "three manly
+  // games" (wrestling, archery, horse racing), and Soyombo elements (sun/moon/fire/star).
+  var EMOJIS = ["🐴","🦅","🐫","🐑","🐐","🐄","🐺","🦌","⛺","🏹","🤼","🎻","🔥","☀️","🌙","⭐","🏔️","👑"];
 
   var RAW = [
     ["Ургац",             "beginner", 2, 2, 22],
