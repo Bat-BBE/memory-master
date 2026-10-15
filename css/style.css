@@ -109,6 +109,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;ma
 .screen{display:none;animation:fade .35s ease}
 .screen.active{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeOnly{from{opacity:0}to{opacity:1}}
 
 /* ---- Home hero ---- */
 .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:stretch}
@@ -255,6 +256,18 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .particle{position:absolute;width:7px;height:7px;border-radius:50%;animation:particleBurst .7s ease-out forwards}
 @keyframes particleBurst{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--px),var(--py)) scale(.3)}}
 
+/* ---- WebGL 3D layer (js/board3d.js, js/hero3d.js) ----
+   The canvas draws the cards; the .memory-card buttons stay on top as
+   invisible hit targets so focus, aria labels and clicks are unchanged. */
+.gl-canvas{position:absolute;display:block;pointer-events:none;z-index:0}
+.board.gl .memory-card{transform:none!important;animation:none!important;z-index:1;border-radius:14px}
+.board.gl .card-inner{visibility:hidden}
+.board.gl .particle-layer{display:none}
+.board.gl .memory-card:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+.hero-art .gl-canvas{inset:0;width:100%;height:100%}
+.hero-art.gl .orb,.hero-art.gl .float-card,.hero-art.gl .spark{display:none}
+.hero-art .good-luck{z-index:1}
+
 /* ---- Combo streak badge ---- */
 .combo-badge{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8a4c,#ff4d6d);
   color:#fff;border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px;
@@ -391,7 +404,12 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:28px;paddi
   /* .panel has backdrop-filter, which creates a new containing block for any
      position:fixed descendant (pins it to the panel, not the viewport) — drop
      it on the sidebar so the fixed bar below actually fixes to the screen. */
-  .sidebar{backdrop-filter:none}
+  /* .panel.sidebar (not just .sidebar) so the ≤640px `.panel{backdrop-filter:blur(6px)}`
+     rule further down can't re-enable it and pin the bar inside the panel again. */
+  .panel.sidebar{backdrop-filter:none}
+  /* Same reason: the screen fade-in's transform would trap the fixed bar for the
+     length of the animation — fade the game screen with opacity only. */
+  #gameScreen.active{animation-name:fadeOnly}
 
   /* Restart / pause / hint stay reachable as a fixed bottom bar instead of
      scrolling past the whole board + instructions to reach them. */
