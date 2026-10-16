@@ -14,29 +14,41 @@
   };
 
   // Card-face glyphs stay colorful emoji on purpose — variety and color help kids remember pairs.
-  var EMOJIS = ["🦊","🐼","🐸","🦄","🐙","🐵","🐧","🦋","🐯","🐨","🐰","🐹","🐳","🦖","🐢","🦉","🐝","🐞"];
+  // Mongolian steppe/nomadic theme: horse, eagle, camel, livestock, ger, Naadam's "three manly
+  // games" (wrestling, archery, horse racing), and Soyombo elements (sun/moon/fire/star).
+  var EMOJIS = ["🐴","🦅","🐫","🐑","🐐","🐄","🐺","🦌","⛺","🏹","🤼","🎻","🔥","☀️","🌙","⭐","🏔️","👑"];
 
+  // Special rules layered on top of the base game (see js/game.js "modifiers").
+  // icon = js/icons.js registry name.
+  var MODIFIERS = {
+    peek:    { icon: "eye",       label: "Харж цээжлэх",  desc: "Тоглоом эхлэхээс өмнө бүх хөзөр 3 секунд нээлттэй харагдана." },
+    shuffle: { icon: "shuffle",   label: "Холилдох",      desc: "3 удаа буруу сонговол нуугдсан 2 хөзөр байраа солино." },
+    golden:  { icon: "zap",       label: "Алтан хос",     desc: "Алтан хүрээтэй хосыг олбол хугацаа 10 секундээр нэмэгдэнэ." },
+    frozen:  { icon: "snowflake", label: "Мөстэй хөзөр",  desc: "Мөстэй хөзрийг шууд эргүүлэх боломжгүй. Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна." }
+  };
+
+  // [name, tier, rows, cols, seconds, modifiers]
   var RAW = [
-    ["Ургац",             "beginner", 2, 2, 22],
-    ["Анхны алхам",       "beginner", 2, 3, 30],
-    ["Тоглоомын талбай",  "simple",   4, 4, 55],
-    ["Зугаатай зун",      "simple",   4, 4, 50],
-    ["Шидэт тоос",        "medium",   4, 5, 65],
-    ["Ой тогтоолтын арга","medium",   4, 5, 60],
-    ["Галт уул",          "hard",     5, 6, 90],
-    ["Мөсөн гүрвэл",      "hard",     5, 6, 85],
-    ["Аянгат шуурга",     "hard",     5, 6, 80],
-    ["Сансрын аялал",     "hard",     5, 6, 75],
-    ["Тэнгэрийн хаалга",  "master",   6, 6, 100],
-    ["Од орчлон",         "master",   6, 6, 96],
-    ["Галактикийн нууц",  "master",   6, 6, 92],
-    ["Мөнхийн мөс",       "master",   6, 6, 88],
-    ["Домгийн луу",       "master",   6, 6, 84],
-    ["Алтан титэм",       "master",   6, 6, 80],
-    ["Тэнгэрийн од",      "master",   6, 6, 76],
-    ["Тархины аварга",    "master",   6, 6, 72],
-    ["Гранд мастер",      "master",   6, 6, 68],
-    ["Memory Legend",     "master",   6, 6, 64]
+    ["Ургац",             "beginner", 2, 2, 22, []],
+    ["Анхны алхам",       "beginner", 2, 3, 30, []],
+    ["Тоглоомын талбай",  "simple",   4, 4, 55, []],
+    ["Зугаатай зун",      "simple",   4, 4, 50, []],
+    ["Шидэт тоос",        "medium",   4, 5, 65, []],
+    ["Ой тогтоолтын арга","medium",   4, 5, 60, []],
+    ["Галт уул",          "hard",     5, 6, 90, ["peek"]],
+    ["Мөсөн гүрвэл",      "hard",     5, 6, 85, ["frozen"]],
+    ["Аянгат шуурга",     "hard",     5, 6, 80, ["shuffle"]],
+    ["Сансрын аялал",     "hard",     5, 6, 75, ["golden"]],
+    ["Тэнгэрийн хаалга",  "master",   6, 6, 100, ["peek", "golden"]],
+    ["Од орчлон",         "master",   6, 6, 96, ["golden", "shuffle"]],
+    ["Галактикийн нууц",  "master",   6, 6, 92, ["shuffle"]],
+    ["Мөнхийн мөс",       "master",   6, 6, 88, ["frozen", "golden"]],
+    ["Домгийн луу",       "master",   6, 6, 84, ["shuffle", "golden"]],
+    ["Алтан титэм",       "master",   6, 6, 80, ["golden", "frozen"]],
+    ["Тэнгэрийн од",      "master",   6, 6, 76, ["peek", "shuffle"]],
+    ["Тархины аварга",    "master",   6, 6, 72, ["frozen", "shuffle"]],
+    ["Гранд мастер",      "master",   6, 6, 68, ["peek", "frozen", "golden"]],
+    ["Memory Legend",     "master",   6, 6, 64, ["peek", "shuffle", "frozen", "golden"]]
   ];
 
   var LEVELS = RAW.map(function (row) {
@@ -49,7 +61,8 @@
       tierIcon: TIERS[tierKey].icon,
       rows: row[2],
       cols: row[3],
-      time: row[4]
+      time: row[4],
+      modifiers: row[5] || []
     };
   });
 
@@ -57,4 +70,5 @@
   global.MM.LEVELS = LEVELS;
   global.MM.TIERS = TIERS;
   global.MM.EMOJIS = EMOJIS;
+  global.MM.MODIFIERS = MODIFIERS;
 })(window);

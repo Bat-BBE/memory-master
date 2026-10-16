@@ -14,7 +14,8 @@
       scores: {},
       theme: "dark",
       soundOn: true,
-      volume: 0.7
+      volume: 0.7,
+      daily: { streak: 0, lastDate: null, bestScore: 0 }
     };
   }
 
