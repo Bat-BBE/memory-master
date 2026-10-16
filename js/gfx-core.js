@@ -158,7 +158,7 @@
     return c;
   }
 
-  // Translucent frost layer laid over a card back for the "Хүлдсэн хөзөр" modifier.
+  // Translucent frost layer laid over a card back for the "Мөстэй хөзөр" modifier.
   function drawIce() {
     var W = TEX_W, H = TEX_H, c = canvas2d(W, H), x = c.getContext("2d");
     var g = x.createLinearGradient(0, 0, W, H);

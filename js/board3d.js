@@ -157,7 +157,7 @@
   function makeItem(card, i) {
     var front = G.frontMaterial(card.emoji, shared.env, card.golden);
     var group = G.buildCard(shared, front);
-    // Frost layer over the card back ("Хүлдсэн хөзөр"); faded in/out from the `frozen` class.
+    // Frost layer over the card back ("Мөстэй хөзөр"); faded in/out from the `frozen` class.
     var ice = new THREE.Mesh(G.cardGeo().face, new THREE.MeshBasicMaterial({
       map: shared.iceTex, transparent: true, opacity: 0, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8

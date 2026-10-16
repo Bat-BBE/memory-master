@@ -258,7 +258,7 @@
         ? done
           ? "★".repeat(stars) + "☆".repeat(3 - stars)
           : "НЭЭЛТТЭЙ"
-        : "ӨМНӨХ ТҮВШИНГ ДАВ") +
+        : "ӨМНӨХ ТҮВШНИЙГ ДАВ") +
       "</div>";
     b.addEventListener("click", function () {
       startLevel(i);
@@ -291,7 +291,7 @@
     streakEl.textContent = d.streak || 0;
     subEl.textContent = playedToday
       ? "Өнөөдрийн сорилтыг дуусгалаа! Дахин тоглож оноогоо сайжруулж болно."
-      : "Өдөр бүр шинэ 10 хос — дараалан тоглож streak-ээ өсгө!";
+      : "Өдөр бүр шинэ 10 хос. Өдөр алгасалгүй тоглож, дараалсан өдрийн тоогоо ахиулаарай!";
     btn.innerHTML =
       Icon("play") + " " + (playedToday ? "Дахин тоглох" : "Тоглох");
   }
@@ -382,7 +382,7 @@
       el.classList.remove("nudge");
     }, 420);
     playTone(220, 0.08, "square");
-    toast("Мөстэй хөзөр — хажуугийн хосыг нь эхлээд ол!", "snowflake");
+    toast("Мөстэй хөзөр! Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна.", "snowflake");
   }
 
   // Swaps two hidden, unfrozen cards. Only cards whose partner is also unfrozen
@@ -571,13 +571,13 @@
       Scoring.STAR_THRESHOLDS.threeStarTimeRatio * 100,
     );
     $("starText").textContent =
-      "3 од: " +
+      "3 од авах нөхцөл: нүүдэл " +
       threeStarMoves +
-      " буюу түүнээс цөөн нүүдэл хийж, хугацааны дээш " +
+      " буюу түүнээс цөөн, үлдсэн хугацаа " +
       threeStarTimePct +
-      "%-ийг үлдээвэл.";
+      " хувиас их.";
     $("tipText").textContent = isDailyRound
-      ? "Өдрийн сорилт: энэ хувилбарыг өнөөдөр бүгд адилхан тоглоно!"
+      ? "Өдрийн сорилт: өнөөдөр бүх хүн яг ижил самбар тоглоно!"
       : level < 4
         ? "Зөвлөгөө: Эргүүлсэн хөзрийн байрлалыг сайн тогтоогоорой."
         : "Мастерын зөвлөгөө: Самбарыг хэсэг хэсгээр нь цээжилж, хосуудыг дарааллаар олоорой.";
@@ -698,7 +698,7 @@
         extra += " · +" + GOLDEN_BONUS + " сек";
         playTone(1046, 0.18, "triangle");
       }
-      if (mods.frozen && thawAround([ia, ib])) extra += " · мөс хайлав";
+      if (mods.frozen && thawAround([ia, ib])) extra += " · мөс хайллаа";
       updateMetrics();
       if (pairs === cards.length / 2) {
         finish(true);
@@ -707,7 +707,7 @@
       if (a.golden) {
         mascotSay("⚡", "Алтан хос! +" + GOLDEN_BONUS + " сек", true);
       } else if (combo > 1) {
-        mascotSay("🤩", combo + " дараалаа!", true);
+        mascotSay("🤩", combo + " хос дараалан!", true);
       } else {
         mascotSay("😊", "Сайн байна!", true);
       }
@@ -793,7 +793,7 @@
           data.daily.lastDate = today;
         }
         data.daily.bestScore = Math.max(data.daily.bestScore || 0, score);
-        streakMsg = " " + data.daily.streak + " өдөр дараалан тогложээ!";
+        streakMsg = " " + data.daily.streak + " өдөр дараалан тогллоо!";
       } else {
         data.bestScore = Math.max(data.bestScore, score);
         data.unlocked = Math.max(
@@ -830,8 +830,8 @@
     );
     $("resultEyebrow").textContent = won
       ? isDailyRound
-        ? "ӨДРИЙН СОРИЛТ ДАВЛАА"
-        : "ТҮВШИН ДАВЛАА"
+        ? "ӨДРИЙН СОРИЛТЫГ ДАВЛАА"
+        : "ТҮВШНИЙГ ДАВЛАА"
       : "ДАХИН ОРОЛДООД ҮЗ!";
     $("resultTitle").textContent = won
       ? stars === 3
@@ -842,7 +842,7 @@
       : "Хугацаа дууслаа";
     $("resultMessage").textContent = won
       ? isDailyRound
-        ? "Өнөөдрийн сорилтыг амжилттай дууслаа!" + streakMsg
+        ? "Өнөөдрийн сорилтыг амжилттай дуусгалаа!" + streakMsg
         : LEVELS[level].name +
           " түвшнийг амжилттай давлаа! " +
           (level === LEVELS.length - 1
@@ -936,7 +936,7 @@
   function hint() {
     if (paused || lock || !timer) return;
     if (hintUsed) {
-      toast("Энэ түвшинд тусламжийг нэг удаа ашиглана.", "lock");
+      toast("Тусламжийг түвшин бүрт зөвхөн нэг удаа ашиглана.", "lock");
       return;
     }
     var unmatched = cards

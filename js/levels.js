@@ -21,10 +21,10 @@
   // Special rules layered on top of the base game (see js/game.js "modifiers").
   // icon = js/icons.js registry name.
   var MODIFIERS = {
-    peek:    { icon: "eye",       label: "Харж цээжлэх",  desc: "Эхний хэдэн секундэд бүх хөзөр нээлттэй харагдана." },
-    shuffle: { icon: "shuffle",   label: "Холилдох",      desc: "3 удаа буруу сонговол 2 хөзөр байраа солино." },
-    golden:  { icon: "zap",       label: "Алтан хос",     desc: "Алтан хүрээтэй хосыг олбол +10 секунд." },
-    frozen:  { icon: "snowflake", label: "Хүлдсэн хөзөр", desc: "Мөстэй хөзөр хажуугийн хос олдсоны дараа л нээгдэнэ." }
+    peek:    { icon: "eye",       label: "Харж цээжлэх",  desc: "Тоглоом эхлэхээс өмнө бүх хөзөр 3 секунд нээлттэй харагдана." },
+    shuffle: { icon: "shuffle",   label: "Холилдох",      desc: "3 удаа буруу сонговол нуугдсан 2 хөзөр байраа солино." },
+    golden:  { icon: "zap",       label: "Алтан хос",     desc: "Алтан хүрээтэй хосыг олбол хугацаа 10 секундээр нэмэгдэнэ." },
+    frozen:  { icon: "snowflake", label: "Мөстэй хөзөр",  desc: "Мөстэй хөзрийг шууд эргүүлэх боломжгүй. Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна." }
   };
 
   // [name, tier, rows, cols, seconds, modifiers]
