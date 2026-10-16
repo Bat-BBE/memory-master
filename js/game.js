@@ -15,6 +15,7 @@
   var Board3D = window.MM.Board3D; // null when WebGL/Three.js is unavailable -> DOM cards
   var Hero3D = window.MM.Hero3D;
   var MODIFIERS = window.MM.MODIFIERS;
+  var TUNING = window.MM.TUNING;
 
   var $ = function (id) {
     return document.getElementById(id);
@@ -56,10 +57,8 @@
   var mods = {},
     boardCols = 4,
     peekTimer = null,
-    missesSinceShuffle = 0;
-  var GOLDEN_BONUS = 10,
-    SHUFFLE_EVERY = 3,
-    PEEK_SECONDS = 3;
+    missesSinceShuffle = 0,
+    tune = TUNING; // modifier strength for the current level (levels.js TUNING)
   var audioCtx = null;
 
   /* ---------- helpers ---------- */
@@ -322,7 +321,7 @@
   // from a "free" pair (both cards unfrozen); matching that pair always thaws
   // it, so a frozen board can never deadlock.
   function pickFrozen() {
-    var target = Math.max(2, Math.round(cards.length / 6));
+    var target = Math.max(2, Math.round(cards.length * tune.frozenShare));
     var frozen = {},
       count = 0;
     function hasFreeNeighbor(i) {
@@ -388,27 +387,33 @@
   // Swaps two hidden, unfrozen cards. Only cards whose partner is also unfrozen
   // are eligible, which keeps pickFrozen()'s no-deadlock guarantee intact.
   function maybeShuffle() {
-    if (!mods.shuffle || missesSinceShuffle < SHUFFLE_EVERY) return;
+    if (!mods.shuffle || missesSinceShuffle < tune.shuffleEvery) return;
     var pool = [];
     cards.forEach(function (c, i) {
       if (c.matched || c.flipped || c.frozen) return;
       if (cards[partnerOf(i)].frozen) return;
       pool.push(i);
     });
-    var a = -1,
-      b = -1;
-    for (var tries = 0; tries < 30 && b < 0; tries++) {
+    var swaps = [];
+    for (var tries = 0; tries < 40 && swaps.length < tune.shuffleSwaps; tries++) {
       var x = pool[Math.floor(Math.random() * pool.length)];
       var y = pool[Math.floor(Math.random() * pool.length)];
-      if (x !== undefined && y !== undefined && cards[x].emoji !== cards[y].emoji) {
-        a = x;
-        b = y;
-      }
+      if (x === undefined || y === undefined || cards[x].emoji === cards[y].emoji)
+        continue;
+      swaps.push([x, y]);
+      // each card moves at most once per shuffle
+      pool = pool.filter(function (k) {
+        return k !== x && k !== y;
+      });
     }
     missesSinceShuffle = 0;
     updateMetrics();
-    if (b < 0) return; // too few hidden cards left to make a meaningful swap
-    swapCards(a, b);
+    if (!swaps.length) return; // too few hidden cards left to make a meaningful swap
+    swaps.forEach(function (pair) {
+      swapCards(pair[0], pair[1]);
+    });
+    mascotSay("🌀", "Хөзрүүд холилдлоо!", true);
+    toast(swaps.length * 2 + " хөзөр байраа солилоо — ажиглаарай!", "shuffle");
   }
 
   function swapCards(i, j) {
@@ -432,22 +437,20 @@
     setTimeout(function () {
       playTone(660, 0.07, "triangle");
     }, 90);
-    mascotSay("🌀", "Хөзрүүд холилдлоо!", true);
-    toast("2 хөзөр байраа солилоо — ажиглаарай!", "shuffle");
   }
 
-  // Shows every face for PEEK_SECONDS before the clock starts.
+  // Shows every face for tune.peek seconds before the clock starts.
   function startPeek() {
     lock = true;
     cards.forEach(function (c) {
       c.element.classList.add("flipped");
     });
-    var secs = PEEK_SECONDS;
+    var secs = tune.peek;
     // Let the 3D deal-in finish so the last cards get the full peek too.
     var dealDelay = board3d ? 450 + cards.length * 22 : 0;
     function step() {
       if (secs > 0) {
-        mascotSay("👀", "Цээжил! " + secs, secs === PEEK_SECONDS);
+        mascotSay("👀", "Цээжил! " + secs, secs === tune.peek);
         playTone(secs === 1 ? 700 : 560, 0.06);
         secs--;
         peekTimer = setTimeout(step, 1000);
@@ -479,7 +482,7 @@
       var m = MODIFIERS[key];
       var chip = document.createElement("span");
       chip.className = "mod-chip mod-" + key;
-      chip.title = m.desc;
+      chip.title = m.desc(l.tuning || TUNING);
       chip.innerHTML =
         Icon(m.icon) +
         "<b>" +
@@ -542,7 +545,11 @@
     modList(l).forEach(function (k) {
       mods[k] = true;
     });
-    boardCols = l.cols;
+    // Wide boss boards (7-8 columns) turn portrait on phones so cards stay tappable.
+    var portrait = l.cols > 6 && window.innerWidth < 640;
+    var rows = portrait ? l.cols : l.rows;
+    boardCols = portrait ? l.rows : l.cols;
+    tune = l.tuning || TUNING;
     missesSinceShuffle = 0;
     var goldenEmoji = mods.golden
       ? chosen[Math.floor(Math.random() * chosen.length)]
@@ -557,7 +564,7 @@
       ? l.name
       : String(level + 1).padStart(2, "0") + ". " + l.name;
     $("levelBadgeSub").textContent =
-      l.rows + "×" + l.cols + " самбар · " + pairCount + " хос";
+      rows + "×" + boardCols + " самбар · " + pairCount + " хос";
     var tierTag = $("levelTierTag");
     tierTag.textContent = l.tier;
     tierTag.parentElement.style.cssText = tierColorStyle(l);
@@ -586,7 +593,7 @@
         "Тусгай дүрэм: " +
         modList(l)
           .map(function (k) {
-            return MODIFIERS[k].desc;
+            return MODIFIERS[k].desc(l.tuning || TUNING);
           })
           .join(" ");
     }
@@ -594,7 +601,7 @@
 
     var board = $("board");
     board.innerHTML = "";
-    board.style.gridTemplateColumns = "repeat(" + l.cols + ",minmax(0,1fr))";
+    board.style.gridTemplateColumns = "repeat(" + boardCols + ",minmax(0,1fr))";
     cards.forEach(function (c, index) {
       var btn = document.createElement("button");
       btn.className =
@@ -694,8 +701,8 @@
       lock = false;
       var extra = "";
       if (a.golden) {
-        timeLeft += GOLDEN_BONUS;
-        extra += " · +" + GOLDEN_BONUS + " сек";
+        timeLeft += tune.goldenBonus;
+        extra += " · +" + tune.goldenBonus + " сек";
         playTone(1046, 0.18, "triangle");
       }
       if (mods.frozen && thawAround([ia, ib])) extra += " · мөс хайллаа";
@@ -705,7 +712,7 @@
         return;
       }
       if (a.golden) {
-        mascotSay("⚡", "Алтан хос! +" + GOLDEN_BONUS + " сек", true);
+        mascotSay("⚡", "Алтан хос! +" + tune.goldenBonus + " сек", true);
       } else if (combo > 1) {
         mascotSay("🤩", combo + " хос дараалан!", true);
       } else {
@@ -750,7 +757,7 @@
       Math.min(100, (timeLeft / totalTime) * 100) + "%";
     var shuffleCount = $("shuffleCount");
     if (shuffleCount)
-      shuffleCount.textContent = missesSinceShuffle + "/" + SHUFFLE_EVERY;
+      shuffleCount.textContent = missesSinceShuffle + "/" + tune.shuffleEvery;
     $("timerFill").classList.toggle(
       "low",
       timeLeft <= Math.max(10, totalTime * 0.22),

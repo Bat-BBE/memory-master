@@ -3,7 +3,8 @@
   "use strict";
 
   // Matching README tier table:
-  // 1-2 Эхлэгч (2-3 pairs) · 3-4 Энгийн (8) · 5-6 Дунд (10) · 7-10 Хэцүү (15) · 11-20 Мастер (18)
+  // 1-2 Эхлэгч (2-3 pairs) · 3-4 Энгийн (8) · 5-6 Дунд (10) · 7-10 Хэцүү (15) · 11-18 Мастер (18)
+  // · 19-20 boss boards (21 / 24 pairs)
   // icon = name from the js/icons.js registry (rendered as a Lucide-style SVG, not emoji).
   var TIERS = {
     beginner: { label: "Эхлэгч", color: "--green",  icon: "sprout" },
@@ -16,18 +17,24 @@
   // Card-face glyphs stay colorful emoji on purpose — variety and color help kids remember pairs.
   // Mongolian steppe/nomadic theme: horse, eagle, camel, livestock, ger, Naadam's "three manly
   // games" (wrestling, archery, horse racing), and Soyombo elements (sun/moon/fire/star).
-  var EMOJIS = ["🐴","🦅","🐫","🐑","🐐","🐄","🐺","🦌","⛺","🏹","🤼","🎻","🔥","☀️","🌙","⭐","🏔️","👑"];
+  // The last six only appear on the two oversized boss boards (levels 19-20).
+  var EMOJIS = ["🐴","🦅","🐫","🐑","🐐","🐄","🐺","🦌","⛺","🏹","🤼","🎻","🔥","☀️","🌙","⭐","🏔️","👑",
+                "🦊","🐻","🦬","🌲","🏇","🥛"];
 
   // Special rules layered on top of the base game (see js/game.js "modifiers").
   // icon = js/icons.js registry name.
   var MODIFIERS = {
-    peek:    { icon: "eye",       label: "Харж цээжлэх",  desc: "Тоглоом эхлэхээс өмнө бүх хөзөр 3 секунд нээлттэй харагдана." },
-    shuffle: { icon: "shuffle",   label: "Холилдох",      desc: "3 удаа буруу сонговол нуугдсан 2 хөзөр байраа солино." },
-    golden:  { icon: "zap",       label: "Алтан хос",     desc: "Алтан хүрээтэй хосыг олбол хугацаа 10 секундээр нэмэгдэнэ." },
-    frozen:  { icon: "snowflake", label: "Мөстэй хөзөр",  desc: "Мөстэй хөзрийг шууд эргүүлэх боломжгүй. Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна." }
+    peek:    { icon: "eye",       label: "Харж цээжлэх",  desc: function (t) { return "Тоглоом эхлэхээс өмнө бүх хөзөр " + t.peek + " секунд нээлттэй харагдана."; } },
+    shuffle: { icon: "shuffle",   label: "Холилдох",      desc: function (t) { return t.shuffleEvery + " удаа буруу сонговол нуугдсан " + t.shuffleSwaps * 2 + " хөзөр байраа солино."; } },
+    golden:  { icon: "zap",       label: "Алтан хос",     desc: function (t) { return "Алтан хүрээтэй хосыг олбол хугацаа " + t.goldenBonus + " секундээр нэмэгдэнэ."; } },
+    frozen:  { icon: "snowflake", label: "Мөстэй хөзөр",  desc: function () { return "Мөстэй хөзрийг шууд эргүүлэх боломжгүй. Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна."; } }
   };
 
-  // [name, tier, rows, cols, seconds, modifiers]
+  // Default modifier strength; a level row may override any of these (7th field).
+  // frozenShare = fraction of cards frozen at the start.
+  var TUNING = { peek: 3, shuffleEvery: 3, shuffleSwaps: 1, goldenBonus: 10, frozenShare: 1 / 6 };
+
+  // [name, tier, rows, cols, seconds, modifiers, tuning overrides]
   var RAW = [
     ["Ургац",             "beginner", 2, 2, 22, []],
     ["Анхны алхам",       "beginner", 2, 3, 30, []],
@@ -47,8 +54,11 @@
     ["Алтан титэм",       "master",   6, 6, 80, ["golden", "frozen"]],
     ["Тэнгэрийн од",      "master",   6, 6, 76, ["peek", "shuffle"]],
     ["Тархины аварга",    "master",   6, 6, 72, ["frozen", "shuffle"]],
-    ["Гранд мастер",      "master",   6, 6, 68, ["peek", "frozen", "golden"]],
-    ["Memory Legend",     "master",   6, 6, 64, ["peek", "shuffle", "frozen", "golden"]]
+    // Boss levels: bigger boards, a short peek, more ice, weaker gold.
+    ["Гранд мастер",      "master",   6, 7, 82, ["peek", "frozen", "shuffle", "golden"],
+      { peek: 2, frozenShare: 1 / 5, goldenBonus: 6 }],
+    ["Memory Legend",     "master",   6, 8, 92, ["peek", "shuffle", "frozen", "golden"],
+      { peek: 1, shuffleEvery: 2, shuffleSwaps: 2, frozenShare: 1 / 4, goldenBonus: 4 }]
   ];
 
   var LEVELS = RAW.map(function (row) {
@@ -62,7 +72,8 @@
       rows: row[2],
       cols: row[3],
       time: row[4],
-      modifiers: row[5] || []
+      modifiers: row[5] || [],
+      tuning: Object.assign({}, TUNING, row[6] || {})
     };
   });
 
@@ -71,4 +82,5 @@
   global.MM.TIERS = TIERS;
   global.MM.EMOJIS = EMOJIS;
   global.MM.MODIFIERS = MODIFIERS;
+  global.MM.TUNING = TUNING;
 })(window);
