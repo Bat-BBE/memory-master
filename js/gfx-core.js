@@ -109,15 +109,28 @@
     return c;
   }
 
-  function drawFront(emoji, pal) {
+  // gold = the "Алтан хос" modifier's pair: warm face + glowing gold frame.
+  function drawFront(emoji, pal, gold) {
     var W = TEX_W, H = TEX_H, c = canvas2d(W, H), x = c.getContext("2d");
     var g = x.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, pal.front1); g.addColorStop(1, pal.front2);
+    g.addColorStop(0, gold ? "#fffaf0" : pal.front1); g.addColorStop(1, gold ? "#ffe39a" : pal.front2);
     x.fillStyle = g; x.fillRect(0, 0, W, H);
     var hl = x.createRadialGradient(W * 0.25, H * 0.15, 0, W * 0.25, H * 0.15, W * 0.9);
     hl.addColorStop(0, "rgba(255,255,255,.75)"); hl.addColorStop(1, "rgba(255,255,255,0)");
     x.fillStyle = hl; x.fillRect(0, 0, W, H);
-    x.lineWidth = 3; x.strokeStyle = "rgba(17,28,72,.12)"; rr(x, 16, 16, W - 32, H - 32, 24); x.stroke();
+    if (gold) {
+      x.save();
+      x.shadowColor = "rgba(255,190,40,.9)"; x.shadowBlur = 18;
+      x.lineWidth = 10; x.strokeStyle = "#f2b632"; rr(x, 14, 14, W - 28, H - 28, 26); x.stroke();
+      x.restore();
+      x.lineWidth = 2; x.strokeStyle = "rgba(160,100,0,.45)"; rr(x, 30, 30, W - 60, H - 60, 16); x.stroke();
+      x.fillStyle = "#e9a512";
+      [[48, 48], [W - 48, 48], [48, H - 48], [W - 48, H - 48]].forEach(function (p) {
+        x.save(); x.translate(p[0], p[1]); star4(x, 11, 3); x.fill(); x.restore();
+      });
+    } else {
+      x.lineWidth = 3; x.strokeStyle = "rgba(17,28,72,.12)"; rr(x, 16, 16, W - 32, H - 32, 24); x.stroke();
+    }
 
     x.font = Math.round(W * 0.5) + "px " + EMOJI_FONT;
     x.textAlign = "center"; x.textBaseline = "middle";
@@ -142,6 +155,38 @@
     x.shadowColor = "rgba(0,0,0,1)"; x.shadowBlur = 16; x.shadowOffsetX = 2000;
     x.fillStyle = "#000";
     rr(x, w * 0.17 - 2000, h * 0.17, w * 0.66, h * 0.66, 12); x.fill();
+    return c;
+  }
+
+  // Translucent frost layer laid over a card back for the "Хүлдсэн хөзөр" modifier.
+  function drawIce() {
+    var W = TEX_W, H = TEX_H, c = canvas2d(W, H), x = c.getContext("2d");
+    var g = x.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "rgba(232,250,255,.82)"); g.addColorStop(1, "rgba(140,210,245,.62)");
+    rr(x, 0, 0, W, H, 34); x.fillStyle = g; x.fill();
+    var seed = 7;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    x.fillStyle = "rgba(255,255,255,.4)";
+    for (var i = 0; i < 160; i++) { x.beginPath(); x.arc(rnd() * W, rnd() * H, 0.6 + rnd() * 2.2, 0, Math.PI * 2); x.fill(); }
+    x.strokeStyle = "rgba(255,255,255,.75)"; x.lineWidth = 2;
+    for (var k = 0; k < 6; k++) {
+      var px = rnd() * W, py = rnd() * H;
+      x.beginPath(); x.moveTo(px, py);
+      for (var s = 0; s < 4; s++) { px += (rnd() - 0.5) * 90; py += (rnd() - 0.5) * 90; x.lineTo(px, py); }
+      x.stroke();
+    }
+    x.lineWidth = 6; x.strokeStyle = "rgba(255,255,255,.9)"; rr(x, 8, 8, W - 16, H - 16, 28); x.stroke();
+    // six-armed snowflake (drawn, so it doesn't depend on an emoji font)
+    x.save(); x.translate(W / 2, H / 2);
+    x.shadowColor = "#7fd8ff"; x.shadowBlur = 16; x.strokeStyle = "#ffffff"; x.lineCap = "round"; x.lineWidth = 7;
+    var R = W * 0.2;
+    for (var a = 0; a < 6; a++) {
+      x.save(); x.rotate(a * Math.PI / 3);
+      x.beginPath(); x.moveTo(0, 0); x.lineTo(0, -R);
+      x.moveTo(0, -R * 0.55); x.lineTo(-R * 0.22, -R * 0.78); x.moveTo(0, -R * 0.55); x.lineTo(R * 0.22, -R * 0.78);
+      x.stroke(); x.restore();
+    }
+    x.restore();
     return c;
   }
 
@@ -176,9 +221,9 @@
     return t;
   }
   function backTexture() { var k = ensureCache(); return k.back || (k.back = toTexture(drawBack(k.pal))); }
-  function frontTexture(emoji) {
-    var k = ensureCache();
-    return k.fronts[emoji] || (k.fronts[emoji] = toTexture(drawFront(emoji, k.pal)));
+  function frontTexture(emoji, gold) {
+    var k = ensureCache(), key = emoji + (gold ? "|gold" : "");
+    return k.fronts[key] || (k.fronts[key] = toTexture(drawFront(emoji, k.pal, gold)));
   }
   var statics = {};
   function staticTexture(name) {
@@ -187,6 +232,7 @@
     if (name === "glow") c = drawRadial(128, [[0, "rgba(255,255,255,1)"], [0.35, "rgba(255,255,255,.45)"], [1, "rgba(255,255,255,0)"]]);
     else if (name === "dot") c = drawRadial(64, [[0, "rgba(255,255,255,1)"], [0.25, "rgba(255,255,255,.85)"], [1, "rgba(255,255,255,0)"]]);
     else if (name === "shadow") c = drawShadow();
+    else if (name === "ice") c = drawIce();
     else c = drawEmojiSprite(name);
     return (statics[name] = toTexture(c));
   }
@@ -276,8 +322,8 @@
     shared.back.map = back; shared.back.emissiveMap = back;
   }
 
-  function frontMaterial(emoji, env) {
-    var t = frontTexture(emoji);
+  function frontMaterial(emoji, env, gold) {
+    var t = frontTexture(emoji, gold);
     return new THREE.MeshStandardMaterial({
       map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.24,
       roughness: 0.5, metalness: 0, envMap: env, envMapIntensity: 0.35,

@@ -268,6 +268,31 @@ h1 span{display:block;background:linear-gradient(90deg,#fff 5%,#7ee9ff 45%,#c17b
 .hero-art.gl .orb,.hero-art.gl .float-card,.hero-art.gl .spark{display:none}
 .hero-art .good-luck{z-index:1}
 
+/* ---- Level modifiers (special rules) ---- */
+.mod-row{display:flex;flex-wrap:wrap;gap:6px;margin:-8px 0 14px}
+.mod-row[hidden]{display:none}
+.mod-chip{--mod:var(--cyan);display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:11.5px;
+  background:color-mix(in srgb, var(--mod) 16%, transparent);border:1px solid color-mix(in srgb, var(--mod) 45%, transparent);color:var(--mod)}
+.mod-chip b{font-weight:800;color:var(--text)}
+.mod-chip small{font-weight:800;font-variant-numeric:tabular-nums}
+.mod-chip .icon{width:13px;height:13px}
+.mod-peek{--mod:var(--purple)}
+.mod-shuffle{--mod:var(--pink)}
+.mod-golden{--mod:var(--gold)}
+.mod-frozen{--mod:var(--cyan)}
+.level-card .level-mods{position:absolute;top:14px;right:12px;display:flex;gap:4px;color:var(--gold)}
+.level-card .level-mods .icon{width:14px;height:14px}
+
+/* DOM-card fallback looks (the 3D board draws its own) */
+.memory-card.frozen .card-back{background:linear-gradient(145deg,#d9f6ff,#7cc6ee);border-color:#f0fbff}
+.memory-card.frozen .card-back:before{content:"❄";color:#ffffffcc}
+.memory-card.frozen .card-back span{opacity:0}
+.memory-card.golden .card-front{border:3px solid #f2b632;box-shadow:0 0 22px #ffc23d80;background:linear-gradient(145deg,#fffaf0,#ffe39a)}
+.memory-card.nudge .card-inner{animation:nudge .4s}
+.memory-card.swapped .card-inner{animation:swapPulse .6s}
+@keyframes nudge{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes swapPulse{0%,100%{transform:scale(1)}50%{transform:scale(.86) rotate(-4deg)}}
+
 /* ---- Combo streak badge ---- */
 .combo-badge{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#ff8a4c,#ff4d6d);
   color:#fff;border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px;

@@ -16,7 +16,11 @@
   var FOV = 40;
   var CARD_H = G.CARD_H;
   var WHITE = new THREE.Color(0xffffff), MINT = new THREE.Color("#b6ffe0"), MINT_GLOW = new THREE.Color("#8ff5cf");
-  var BURST = ["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"].map(function (c) { return new THREE.Color(c); });
+  function colors(list) { return list.map(function (c) { return new THREE.Color(c); }); }
+  var BURST = colors(["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"]);
+  var GOLD_BURST = colors(["#ffd35a", "#ffb02e", "#fff3c4", "#ffe07a"]);
+  var ICE_BURST = colors(["#ffffff", "#c8f4ff", "#7fd8ff", "#a9e6ff"]);
+  var GOLD_GLOW = new THREE.Color("#ffc23d"), GOLD_TINT = new THREE.Color("#ffe8a6");
 
   var renderer = null, canvas, scene, camera, shared, lights, sparks, governor;
   var boardEl = null, items = [], byEl = new WeakMap();
@@ -56,13 +60,14 @@
     this.points.renderOrder = 5;
     this.gravity = 1200;
   }
-  Sparks.prototype.burst = function (x, y, z, count, w) {
+  Sparks.prototype.burst = function (x, y, z, count, w, palette) {
+    palette = palette || BURST;
     for (var k = 0; k < count; k++) {
       var i = this.cursor; this.cursor = (this.cursor + 1) % this.n;
       var a = Math.random() * Math.PI * 2, sp = w * (1.4 + Math.random() * 2.2), j = i * 3;
       this.pos[j] = x; this.pos[j + 1] = y; this.pos[j + 2] = z;
       this.vel[j] = Math.cos(a) * sp; this.vel[j + 1] = Math.sin(a) * sp + w * 1.1; this.vel[j + 2] = (0.3 + Math.random() * 0.6) * sp;
-      var c = BURST[(Math.random() * BURST.length) | 0];
+      var c = palette[(Math.random() * palette.length) | 0];
       this.col[j] = c.r; this.col[j + 1] = c.g; this.col[j + 2] = c.b;
       this.base[i] = w * (0.06 + Math.random() * 0.09);
       this.life[i] = this.max[i] = 0.55 + Math.random() * 0.55;
@@ -107,6 +112,7 @@
     shared = G.sharedMaterials(G.makeEnv(renderer));
     shared.shadowTex = G.staticTexture("shadow");
     shared.glowTex = G.staticTexture("glow");
+    shared.iceTex = G.staticTexture("ice");
     lights = G.addLights(scene);
     sparks = new Sparks(G.coarse ? 360 : 640);
     scene.add(sparks.points);
@@ -143,14 +149,22 @@
   function clearItems() {
     items.forEach(function (it) {
       scene.remove(it.group, it.shadow, it.glow);
-      it.front.dispose(); it.shadow.material.dispose(); it.glow.material.dispose();
+      it.front.dispose(); it.shadow.material.dispose(); it.glow.material.dispose(); it.ice.material.dispose();
     });
     items = [];
   }
 
   function makeItem(card, i) {
-    var front = G.frontMaterial(card.emoji, shared.env);
+    var front = G.frontMaterial(card.emoji, shared.env, card.golden);
     var group = G.buildCard(shared, front);
+    // Frost layer over the card back ("Хүлдсэн хөзөр"); faded in/out from the `frozen` class.
+    var ice = new THREE.Mesh(G.cardGeo().face, new THREE.MeshBasicMaterial({
+      map: shared.iceTex, transparent: true, opacity: 0, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8
+    }));
+    ice.position.z = G.cardGeo().half + 0.006;
+    ice.visible = false;
+    group.add(ice);
     var quad = G.cardGeo().quad;
     var shadow = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({
       map: shared.shadowTex, color: 0x000000, transparent: true, opacity: 0, depthWrite: false
@@ -162,26 +176,32 @@
     shadow.renderOrder = 1; glow.renderOrder = 2;
     scene.add(shadow, glow, group);
     var it = {
-      index: i, card: card, group: group, front: front, shadow: shadow, glow: glow,
+      index: i, card: card, group: group, front: front, shadow: shadow, glow: glow, ice: ice,
       flip: new G.Spring(0, 190, 17), lift: new G.Spring(0, 260, 24), pop: new G.Spring(1, 320, 13),
       tx: new G.Spring(0, 220, 24), ty: new G.Spring(0, 220, 24), spin: new G.Spring(0, 70, 12),
       deal: new G.Spring(0, 130, 15),
       dealAt: G.reducedMotion ? 0 : clock + 0.04 + i * 0.022,
-      glowAmt: 0, flash: 0, shake: -1, wasMatched: false, wasShake: false, hopAt: -1,
+      glowAmt: 0, flash: 0, shake: -1, wasMatched: false, wasShake: false, wasNudge: false, hopAt: -1,
+      iceAmt: card.element.classList.contains("frozen") ? 1 : 0, wasFrozen: false, shatter: 0,
+      swapT: -1, swapX: 0, swapY: 0, swapH: 0,
       x: 0, y: 0, w: 1
     };
+    it.wasFrozen = it.iceAmt > 0;
     if (G.reducedMotion) it.deal.snap(1);
     byEl.set(card.element, it);
     return it;
   }
 
+  // Re-reads the card's current emoji/golden flag (they change on a shuffle swap).
+  function setFront(it) {
+    var t = G.frontTexture(it.card.emoji, it.card.golden);
+    it.front.map = t; it.front.emissiveMap = t;
+  }
+
   function refreshTextures() {
     if (!renderer) return;
     G.refreshShared(shared);
-    items.forEach(function (it) {
-      var t = G.frontTexture(it.card.emoji);
-      it.front.map = t; it.front.emissiveMap = t;
-    });
+    items.forEach(setFront);
     var light = G.themeKey() === "light";
     items.forEach(function (it) { it.shadow.material.color.set(light ? 0x1b2160 : 0x000000); });
     dirty = true;
@@ -213,19 +233,31 @@
 
   /* ---------- per-frame ---------- */
   function onMatched(it) {
+    var gold = !!it.card.golden;
     it.flash = 1;
-    it.pop.v += 4.5;
-    sparks.burst(it.x, it.y, it.w * 0.45, G.coarse ? 16 : 28, it.w);
+    it.pop.v += gold ? 6 : 4.5;
+    it.glow.material.color.copy(gold ? GOLD_GLOW : MINT_GLOW);
+    sparks.burst(it.x, it.y, it.w * 0.45, (G.coarse ? 16 : 28) * (gold ? 2 : 1), it.w, gold ? GOLD_BURST : BURST);
   }
+
+  function onThawed(it) {
+    it.shatter = 1;
+    it.pop.v += 3;
+    sparks.burst(it.x, it.y, it.w * 0.3, G.coarse ? 14 : 24, it.w * 0.8, ICE_BURST);
+  }
+
+  function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
   function updateItem(it, dt) {
     var cl = it.card.element.classList;
     var matched = cl.contains("matched");
     var up = matched || cl.contains("flipped");
-    var shaking = cl.contains("shake");
+    var shaking = cl.contains("shake"), nudging = cl.contains("nudge");
+    var frozen = cl.contains("frozen");
     if (matched && !it.wasMatched) onMatched(it);
-    if (shaking && !it.wasShake) it.shake = 0;
-    it.wasMatched = matched; it.wasShake = shaking;
+    if ((shaking && !it.wasShake) || (nudging && !it.wasNudge)) it.shake = 0;
+    if (!frozen && it.wasFrozen) onThawed(it);
+    it.wasMatched = matched; it.wasShake = shaking; it.wasNudge = nudging; it.wasFrozen = frozen;
 
     var hover = G.finePointer && pointer.on && hovered === it.index && !up;
     it.flip.t = up ? 1 : 0;
@@ -262,18 +294,45 @@
       else { var wave = Math.sin(k * Math.PI * 7) * (1 - k); sx = wave * 0.07 * w; rz = wave * 0.05; }
       moving = true;
     }
+    // Shuffle swap: the card starts at its partner-in-swap's spot and arcs home,
+    // so with the swapped textures it reads as the two cards trading places.
+    var ox = 0, oy = 0;
+    if (it.swapT >= 0) {
+      it.swapT += dt / 0.8;
+      if (it.swapT >= 1) it.swapT = -1;
+      else {
+        var e = easeInOut(it.swapT), arcS = Math.sin(it.swapT * Math.PI);
+        ox = it.swapX * (1 - e); oy = it.swapY * (1 - e);
+        z += arcS * it.swapH * w;
+        rz += arcS * (it.swapH > 0.5 ? 0.25 : -0.25);
+      }
+      moving = true;
+    }
     var drop = (1 - deal) * 0.9 * w;
     var g = it.group;
     g.visible = clock >= it.dealAt;
-    g.position.set(it.x + sx, it.y - drop, z);
+    g.position.set(it.x + sx + ox, it.y - drop + oy, z);
     g.rotation.set(it.tx.x + (1 - deal) * 1.1, f * Math.PI + it.ty.x + it.spin.x, rz);
     var s = w * it.pop.x * (0.35 + 0.65 * deal);
     g.scale.set(s, s, s);
 
+    // Ice fades in/out; on thaw it also swells slightly as it "shatters".
+    var iceTarget = frozen ? 1 : 0;
+    if (Math.abs(iceTarget - it.iceAmt) > 0.003) {
+      it.iceAmt += (iceTarget - it.iceAmt) * Math.min(1, dt * (frozen ? 6 : 9));
+      moving = true;
+    } else it.iceAmt = iceTarget;
+    if (it.shatter > 0) { it.shatter = Math.max(0, it.shatter - dt * 3); moving = true; }
+    it.ice.visible = it.iceAmt > 0.01;
+    if (it.ice.visible) {
+      it.ice.material.opacity = it.iceAmt * 0.95;
+      it.ice.scale.setScalar(1 + (1 - it.shatter) * (1 - it.iceAmt) * 0.25);
+    }
+
     var h = Math.max(0, z / w), ds = Math.max(0, Math.min(1, deal));
     it.shadow.visible = g.visible;
     // Shadow/glow sit well below the table plane so a sunk or tilted card never dips behind them.
-    it.shadow.position.set(it.x + sx + h * w * 0.2, it.y - drop - h * w * 0.3, -0.6 * w);
+    it.shadow.position.set(it.x + sx + ox + h * w * 0.2, it.y - drop + oy - h * w * 0.3, -0.6 * w);
     var ss = w * (1.45 + h * 0.6) * (0.35 + 0.65 * ds);
     it.shadow.scale.set(ss, ss * CARD_H, 1);
     it.shadow.material.opacity = Math.max(0.06, 0.42 - h * 0.5) * ds;
@@ -281,8 +340,9 @@
     var target = matched ? 1 : 0;
     if (Math.abs(target - it.glowAmt) > 0.002) {
       it.glowAmt += (target - it.glowAmt) * Math.min(1, dt * 5);
-      it.front.color.copy(WHITE).lerp(MINT, it.glowAmt);
-      it.front.emissive.copy(WHITE).lerp(MINT, it.glowAmt);
+      var tint = it.card.golden ? GOLD_TINT : MINT;
+      it.front.color.copy(WHITE).lerp(tint, it.glowAmt);
+      it.front.emissive.copy(WHITE).lerp(tint, it.glowAmt);
       moving = true;
     }
     if (it.flash > 0) { it.flash = Math.max(0, it.flash - dt * 1.6); moving = true; }
@@ -338,6 +398,17 @@
 
   /* ---------- public API ---------- */
   var api = {
+    // Called after game.js swapped two cards' data (shuffle modifier).
+    swap: function (i, j) {
+      var a = items[i], b = items[j];
+      if (!a || !b) return;
+      setFront(a); setFront(b);
+      a.swapX = b.x - a.x; a.swapY = b.y - a.y;
+      b.swapX = -a.swapX; b.swapY = -a.swapY;
+      a.swapH = 0.75; b.swapH = 0.3;          // different arc heights so they pass, not collide
+      a.swapT = b.swapT = G.reducedMotion ? -1 : 0;
+      dirty = true;
+    },
     // Wave of hops + spins across the board when the level is cleared.
     celebrate: function () {
       if (G.reducedMotion) return;
