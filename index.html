@@ -7,16 +7,20 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="theme-color" content="#080b20" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Memory Master" />
     <title>Memory Master — Ой тогтоолт</title>
     <meta
       name="description"
       content="Хөзрүүдийг эргүүлж, ижил хосуудыг ол! Монгол хүүхдүүдэд зориулсан ой тогтоолт, анхаарал төвлөрүүлэх тоглоом."
     />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E"
-    />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800;900&display=swap"
@@ -25,12 +29,15 @@
   </head>
   <body>
     <div class="app">
-      <header>
-        <div class="brand">
-          <div class="brand-icon" data-icon="crown"></div>
-          <div>MEMORY MASTER<small>Ой тогтоолт</small></div>
-        </div>
+      <header class="topbar">
+        <button class="brand" id="brandBtn" aria-label="Нүүр хуудас">
+          <span class="brand-icon" data-icon="crown"></span>
+          <span class="brand-text">MEMORY MASTER<small>Ой тогтоолт</small></span>
+        </button>
         <div class="top-actions">
+          <div class="streak-chip" id="topStreak" title="Өдрийн сорилтын дараалал">
+            <span data-icon="flame"></span><b id="topStreakNum">0</b>
+          </div>
           <button
             class="icon-btn"
             id="soundBtn"
@@ -50,40 +57,8 @@
 
       <!-- ===== HOME ===== -->
       <section id="homeScreen" class="screen active">
-        <div class="hero">
-          <div class="panel hero-copy">
-            <!-- <div class="hero-brain" aria-hidden="true">🧠</div> -->
-            <div class="eyebrow">
-              <span data-icon="sparkles"></span> Ой тогтоолтын сорилт
-            </div>
-            <h1>MEMORY <span>MASTER</span></h1>
-            <p class="subtitle">
-              Хөзрүүдийг эргүүлж, ижил хосуудыг ол! Ой тогтоолт, анхаарал
-              төвлөрүүлэх тоглоом.
-            </p>
-            <div class="hero-buttons">
-              <button class="primary" id="continueBtn">
-                <span data-icon="play"></span> ТОГЛОХ
-              </button>
-            </div>
-            <div class="hero-mini-actions">
-              <button class="mini-btn" id="rateBtn">
-                <span data-icon="bar-chart-3"></span> Үнэлгээ
-              </button>
-              <button class="mini-btn" id="achvBtn">
-                <span data-icon="trophy"></span> Амжилт
-              </button>
-              <button class="mini-btn" id="helpBtn">
-                <span data-icon="help-circle"></span> Тусламж
-              </button>
-            </div>
-            <div class="stats-row">
-              <div><b id="homeBest">0</b>Дээд оноо</div>
-              <div><b id="homeWins">0</b>Давсан түвшин</div>
-              <div><b>20</b>Нийт түвшин</div>
-            </div>
-          </div>
-          <div class="panel hero-art" id="heroArt" aria-hidden="true">
+        <div class="hero panel">
+          <div class="hero-art" id="heroArt" aria-hidden="true">
             <div class="orb" id="heroOrb">
               <span class="orb-glow"></span>
               <span class="orb-emoji">🧠</span>
@@ -96,18 +71,55 @@
             <div class="float-card fc2">🦅</div>
             <div class="float-card fc3">🐺</div>
             <div class="float-card fc4">🐫</div>
-            <div class="good-luck">Good Luck! ✧</div>
+          </div>
+          <div class="hero-copy">
+            <div class="eyebrow">
+              <span data-icon="sparkles"></span> Ой тогтоолтын сорилт
+            </div>
+            <h1>MEMORY <span>MASTER</span></h1>
+            <p class="subtitle">
+              Хөзрүүдийг эргүүлж, ижил хосуудыг ол! Ой тогтоолт, анхаарал
+              төвлөрүүлэх тоглоом.
+            </p>
+            <button class="primary play-cta" id="continueBtn">
+              <span class="play-cta-icon" data-icon="play"></span>
+              <span class="play-cta-text">
+                <b>ТОГЛОХ</b>
+                <small id="continueSub">Түвшин 01 · Ургац</small>
+              </span>
+            </button>
+            <div class="star-progress" aria-label="Цуглуулсан од">
+              <div class="star-progress-head">
+                <span><span data-icon="star"></span> <b id="homeStars">0</b> / 60 од</span>
+                <span><b id="homeWins">0</b> / 20 түвшин</span>
+              </div>
+              <div class="star-progress-track"><div class="star-progress-fill" id="homeStarFill"></div></div>
+            </div>
+            <div class="hero-mini-actions">
+              <button class="mini-btn" id="rateBtn">
+                <span data-icon="bar-chart-3"></span> Үнэлгээ
+              </button>
+              <button class="mini-btn" id="achvBtn">
+                <span data-icon="trophy"></span> Амжилт
+                <i class="dot" id="achvDot" hidden></i>
+              </button>
+              <button class="mini-btn" id="helpBtn">
+                <span data-icon="help-circle"></span> Тусламж
+              </button>
+            </div>
           </div>
         </div>
 
-        <div class="panel daily-banner">
+        <div class="panel daily-banner" id="dailyBanner">
           <div class="daily-icon"><span data-icon="calendar"></span></div>
           <div class="daily-text">
-            <strong>Өдрийн сорилт</strong>
+            <strong>Өдрийн сорилт <span class="daily-done" id="dailyDone" hidden>✓</span></strong>
             <small id="dailyBannerSub">Өдөр бүр шинэ 10 хос. Өдөр алгасалгүй тоглож, дараалсан өдрийн тоогоо ахиулаарай!</small>
           </div>
-          <div class="daily-streak"><span data-icon="flame"></span><span id="dailyStreakNum">0</span> өдөр</div>
-          <button class="primary" id="dailyPlayBtn"><span data-icon="play"></span> Тоглох</button>
+          <div class="daily-side">
+            <div class="daily-streak"><span data-icon="flame"></span><span id="dailyStreakNum">0</span> өдөр</div>
+            <button class="primary small" id="dailyPlayBtn"><span data-icon="play"></span> Тоглох</button>
+          </div>
         </div>
 
         <div class="section-head">
@@ -115,77 +127,76 @@
             <h2>Түвшнээ сонго</h2>
             <p>Түвшин ахих тусам хос олширч, сорилт хүндэрнэ.</p>
           </div>
-          <button class="secondary" id="allLevelsBtn">
-            Бүх түвшин <span data-icon="arrow-right"></span>
+          <button class="secondary small" id="allLevelsBtn">
+            Бүгд <span data-icon="arrow-right"></span>
           </button>
         </div>
-        <div class="level-grid" id="homeLevels"></div>
+        <div class="level-grid level-grid--home" id="homeLevels"></div>
       </section>
 
       <!-- ===== LEVEL SELECT ===== -->
       <section id="levelsScreen" class="screen">
-        <div class="section-head">
-          <div>
-            <h2 style="display: flex; align-items: center; gap: 8px">
-              <span data-icon="trophy"></span> Түвшин сонгох
-            </h2>
+        <div class="section-head section-head--sticky">
+          <button class="back-circle" id="backHomeBtn" aria-label="Нүүр" data-icon="arrow-left"></button>
+          <div class="grow">
+            <h2>Түвшин сонгох</h2>
             <p>Түгжээтэй түвшнийг нээхийн тулд өмнөх түвшнийг дав.</p>
           </div>
-          <button class="secondary" id="backHomeBtn">
-            <span data-icon="arrow-left"></span> Нүүр
-          </button>
         </div>
-        <div class="level-grid" id="allLevels"></div>
+        <div id="allLevels"></div>
       </section>
 
       <!-- ===== GAME ===== -->
       <section id="gameScreen" class="screen">
         <div class="game-layout">
           <div class="panel game-main">
-            <div class="mascot-wrap" aria-hidden="true">
-              <div class="mascot-bubble" id="mascotBubble"></div>
-              <div class="mascot-face" id="mascotFace">🧠</div>
-            </div>
-            <div class="game-top">
-              <div class="game-top-left">
+            <div class="hud">
+              <div class="hud-top">
                 <button
                   class="back-circle"
                   id="quitBtn"
-                  aria-label="Гарах"
+                  aria-label="Цэс"
                   data-icon="arrow-left"
                 ></button>
-                <div class="level-badge">
-                  <div style="display: flex; align-items: center; gap: 8px">
+                <div class="level-badge" id="levelBadge">
+                  <div class="level-badge-row">
                     <span id="levelBadgeName">Түвшин 1</span>
                     <span class="tier-tag" id="levelTierTag">Эхлэгч</span>
                   </div>
                   <small id="levelBadgeSub">2×2 самбар · 2 хос</small>
                 </div>
-              </div>
-              <div class="pill-row">
-                <div class="pill combo-badge" id="comboBadge">
-                  <span data-icon="flame"></span><b id="comboCount">x2</b>
+                <div class="mascot-wrap" aria-hidden="true">
+                  <div class="mascot-face" id="mascotFace">🧠</div>
+                  <div class="mascot-bubble" id="mascotBubble"></div>
                 </div>
-                <div class="pill">
+              </div>
+              <div class="hud-stats">
+                <div class="stat stat--time" id="timeStat">
                   <span data-icon="timer"></span><b id="timeMetric">00:45</b>
                 </div>
-                <div class="pill gold">
+                <div class="stat stat--gold">
                   <span data-icon="star"></span><b id="scoreMetric">0</b>
                 </div>
-                <div class="pill">
+                <div class="stat">
                   <span data-icon="repeat"></span><b id="movesMetric">0</b>
                 </div>
-                <div class="pill">
+                <div class="stat">
                   <span data-icon="layers"></span><b id="pairsMetric">0/8</b>
                 </div>
               </div>
+              <div class="timer-track">
+                <div class="timer-fill" id="timerFill"></div>
+              </div>
+              <div class="mod-row" id="modRow" hidden></div>
             </div>
-            <div class="timer-track">
-              <div class="timer-fill" id="timerFill"></div>
+            <div class="board-wrap">
+              <div class="combo-badge" id="comboBadge" aria-live="polite">
+                <span data-icon="flame"></span><b id="comboCount">x2</b>
+              </div>
+              <div class="board" id="board" aria-label="Хөзрийн самбар"></div>
             </div>
-            <div class="mod-row" id="modRow" hidden></div>
-            <div class="board" id="board" aria-label="Хөзрийн самбар"></div>
           </div>
+
           <aside class="panel sidebar">
             <h3 class="side-title">ТАЙЛБАР</h3>
             <div class="mission">
@@ -216,19 +227,21 @@
                 анхааралтай ажиглаарай.</span
               >
             </div>
-            <div class="side-actions">
-              <button id="restartBtn">
-                <span data-icon="rotate-ccw"></span> Дахин эхлүүлэх
-              </button>
-              <button id="pauseBtn" type="button" class="game-btn pause-btn">
-                <span id="pauseIcon" data-icon="pause"></span
-                ><span id="pauseLabel">Түр зогсоох</span>
-              </button>
-              <button id="hintBtn">
-                <span data-icon="sparkles"></span> Нэг хосын тусламж
-              </button>
-            </div>
           </aside>
+
+          <nav class="action-bar" id="actionBar" aria-label="Тоглоомын удирдлага">
+            <button id="restartBtn" type="button">
+              <span data-icon="rotate-ccw"></span><span>Дахин</span>
+            </button>
+            <button id="pauseBtn" type="button" class="pause-btn">
+              <span id="pauseIcon" data-icon="pause"></span
+              ><span id="pauseLabel">Зогсоох</span>
+            </button>
+            <button id="hintBtn" type="button">
+              <span data-icon="lightbulb"></span><span>Тусламж</span>
+              <i class="badge" id="hintBadge">1</i>
+            </button>
+          </nav>
         </div>
       </section>
 
@@ -243,18 +256,27 @@
           <div class="result-icon" id="resultIcon" data-icon="trophy"></div>
           <div class="eyebrow" id="resultEyebrow">ТҮВШНИЙГ ДАВЛАА</div>
           <h2 id="resultTitle">Гайхалтай!</h2>
+          <div class="result-stars" id="resultStars" aria-label="Од"></div>
+          <div class="record-badge" id="recordBadge" hidden>
+            <span data-icon="trophy"></span> Шинэ рекорд!
+          </div>
           <p id="resultMessage">Бүх хосыг оллоо.</p>
           <div class="result-stats">
             <div><span>ОНОО</span><b id="resultScore">0</b></div>
             <div><span>ХУГАЦАА</span><b id="resultTime">00:00</b></div>
-            <div><span>ОД</span><b id="resultStars">★★★</b></div>
+            <div><span>НҮҮДЭЛ</span><b id="resultMoves">0</b></div>
           </div>
+          <ul class="breakdown" id="resultBreakdown"></ul>
+          <div class="new-achv" id="resultAchv" hidden></div>
           <div class="result-actions">
             <button class="primary" id="nextBtn">
               Дараагийн түвшин <span data-icon="arrow-right"></span>
             </button>
             <button class="secondary" id="replayBtn">
-              <span data-icon="rotate-ccw"></span> Дахин тоглох
+              <span data-icon="rotate-ccw"></span> Дахин
+            </button>
+            <button class="secondary" id="shareBtn">
+              <span data-icon="share"></span> Хуваалцах
             </button>
             <button class="secondary" id="resultHomeBtn">
               <span data-icon="home"></span> Нүүр
@@ -266,6 +288,25 @@
         MEMORY MASTER · Үнэгүй веб тоглоом · Ахиц энэ төхөөрөмжид
         хадгалагдана
       </footer>
+    </div>
+
+    <!-- ===== LEVEL INTRO / PAUSE SHEET ===== -->
+    <div
+      class="modal-backdrop"
+      id="levelSheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sheetTitle"
+    >
+      <div class="modal sheet">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <div class="eyebrow" id="sheetEyebrow">ТҮВШИН 01</div>
+        <h2 id="sheetTitle" class="sheet-title">Ургац</h2>
+        <div class="sheet-facts" id="sheetFacts"></div>
+        <div class="sheet-mods" id="sheetMods"></div>
+        <div class="sheet-goal" id="sheetGoal"></div>
+        <div class="sheet-actions" id="sheetActions"></div>
+      </div>
     </div>
 
     <!-- ===== SETTINGS MODAL ===== -->
@@ -296,25 +337,33 @@
         </div>
         <div class="modal-row">
           <span><span data-icon="volume-2"></span> Дуу</span>
-          <div class="toggle" id="soundToggle"><div class="knob"></div></div>
+          <button class="toggle" id="soundToggle" role="switch" aria-label="Дуу"><span class="knob"></span></button>
         </div>
         <div class="modal-row">
           <span>Дууны түвшин</span>
-          <span style="display: flex; align-items: center; gap: 8px"
+          <span class="range-wrap"
             ><input
               type="range"
               min="0"
               max="100"
               value="70"
               id="volumeRange"
+              aria-label="Дууны түвшин"
             /><b id="volumeLabel">70%</b></span
           >
+        </div>
+        <div class="modal-row">
+          <span><span data-icon="smartphone"></span> Чичиргээ</span>
+          <button class="toggle" id="hapticToggle" role="switch" aria-label="Чичиргээ"><span class="knob"></span></button>
         </div>
         <div class="modal-row">
           <span><span data-icon="trophy"></span> Хадгалагдсан дээд оноо</span
           ><strong id="savedHighScore">0</strong>
         </div>
         <p>Түвшин, дээд оноо болон ахиц энэ төхөөрөмжийн хөтөч дээр хадгалагдана.</p>
+        <button class="danger-btn" id="resetBtn" type="button">
+          <span data-icon="trash"></span> <span id="resetLabel">Ахицыг устгах</span>
+        </button>
         <button class="primary js-modal-close" style="width: 100%">
           <span data-icon="check-circle"></span> Ойлголоо
         </button>
@@ -349,8 +398,8 @@
           </li>
           <li>
             <span class="ic" data-icon="rotate-ccw"></span>Хоёр хөзөр өөр
-            зурагтай бол хэсэг хугацааны дараа буцаж хаагдана — байрлалыг нь
-            сайн санаарай!
+            зурагтай бол хэсэг хугацааны дараа буцаж хаагдана. Хүлээлгүй
+            шууд дараагийн хөзрөө дарж болно.
           </li>
           <li>
             <span class="ic" data-icon="hourglass"></span>Хугацаа дуусахаас өмнө
@@ -361,9 +410,9 @@
             олбол нэмэлт (combo) оноо авна.
           </li>
           <li>
-            <span class="ic" data-icon="sparkles"></span>Хэцүү байвал "Нэг хосын
-            тусламж" товчийг ашигла. Түвшин бүрт нэг удаа ашиглах бөгөөд 50
-            оноо хасагдана.
+            <span class="ic" data-icon="lightbulb"></span>Хэцүү байвал "Тусламж"
+            товчийг ашигла. Түвшин бүрт нэг удаа ашиглах бөгөөд 50 оноо
+            хасагдана.
           </li>
           <li>
             <span class="ic" data-icon="star"></span>Хурдан, цөөн нүүдлээр
@@ -378,6 +427,10 @@
             тусгай дүрэм нэмэгдэнэ: харж цээжлэх, холилдох хөзөр, алтан хос
             (нэмэлт хугацаа), мөстэй хөзөр. Сүүлийн 2 түвшин хамгийн хэцүү:
             самбар том, дүрмүүд илүү хатуу.
+          </li>
+          <li>
+            <span class="ic" data-icon="smartphone"></span>Гар утасны нүүр
+            дэлгэцэд нэмбэл (Add to Home Screen) интернэтгүй ч тоглож болно.
           </li>
         </ul>
         <button
@@ -418,8 +471,11 @@
             ><span>ДЭЭД ОНОО</span>
           </div>
         </div>
-        <p style="margin-bottom: 6px">Түвшний ангиллаар цуглуулсан тэмдэг:</p>
+        <div class="stat-list" id="statList"></div>
+        <p class="modal-sub">Түвшний ангиллаар цуглуулсан тэмдэг:</p>
         <div class="badge-row" id="tierBadges"></div>
+        <p class="modal-sub">Шагналууд <b id="achvCount">0/0</b></p>
+        <div class="achv-list" id="achvList"></div>
         <button
           class="primary js-modal-close"
           style="width: 100%; margin-top: 16px"
@@ -457,7 +513,7 @@
       </div>
     </div>
 
-    <div class="toast" id="toast" role="status"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="js/icons.js"></script>
     <script src="js/levels.js"></script>
@@ -465,6 +521,7 @@
     <script src="js/scoring.js"></script>
     <script src="js/rng.js"></script>
     <script src="js/tilt.js"></script>
+    <script src="js/achievements.js"></script>
     <!-- 3D layer: vendored Three.js r149 (works offline). If WebGL is unavailable
          these modules no-op and the original DOM/CSS cards are used. -->
     <script src="js/vendor/three.min.js"></script>

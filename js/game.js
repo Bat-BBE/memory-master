@@ -7,6 +7,7 @@
   var TIERS = window.MM.TIERS;
   var Storage = window.MM.Storage;
   var Scoring = window.MM.Scoring;
+  var Achievements = window.MM.Achievements;
   var Icon = window.MM.Icon;
   var attachTilt = window.MM.attachTilt;
   var seededShuffle = window.MM.seededShuffle;
@@ -24,15 +25,27 @@
   var DAILY_LEVEL = {
     name: "Өдрийн сорилт",
     tier: "Өдрийн сорилт",
+    tierKey: "daily",
     tierColorVar: "--gold",
     tierIcon: "calendar",
     rows: 4,
     cols: 5,
     time: 70,
+    modifiers: [],
+    tuning: TUNING,
   };
+  // Regular boards draw from the first 18 glyphs; the last six stay reserved
+  // for the oversized boss boards (see levels.js).
+  var BASE_EMOJI_POOL = 18;
+  var MISMATCH_MS = 750;
+  var HINT_COST = 50;
 
   var data = Storage.load();
+
+  /* Round state. phase: idle → intro → (peek) → play ⇄ paused → done */
+  var phase = "idle";
   var level = 0,
+    levelDef = null,
     cards = [],
     first = null,
     second = null,
@@ -43,23 +56,26 @@
     score = 0,
     moves = 0,
     pairs = 0,
-    combo = 0;
+    combo = 0,
+    maxCombo = 0,
+    pairPoints = 0,
+    hintPenalty = 0;
   var timer = null,
     mismatchTimer = null,
     hintTimer = null,
     mascotTimer = null,
-    paused = false,
-    startedAt = 0,
+    peekTimer = null,
+    resultTimer = null,
     hintUsed = false;
-  var board3d = null,
-    resultTimer = null;
+  var board3d = null;
   // Level modifiers (special rules) — see "level modifiers" section below.
   var mods = {},
     boardCols = 4,
-    peekTimer = null,
+    boardRows = 4,
     missesSinceShuffle = 0,
     tune = TUNING; // modifier strength for the current level (levels.js TUNING)
   var audioCtx = null;
+  var lastResult = null;
 
   /* ---------- helpers ---------- */
   function fmt(s) {
@@ -71,12 +87,42 @@
     );
   }
 
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function starsText(n) {
+    return "★".repeat(n) + "☆".repeat(3 - n);
+  }
+
+  function reducedMotion() {
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function activeScreen() {
+    var el = document.querySelector(".screen.active");
+    return el ? el.id.replace("Screen", "") : "home";
+  }
+
   function showScreen(name) {
     document.querySelectorAll(".screen").forEach(function (s) {
       s.classList.remove("active");
     });
     $(name + "Screen").classList.add("active");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.setAttribute("data-screen", name);
+    window.scrollTo(0, 0);
+    // One history entry for "inside the app", so the phone's back button
+    // returns to the home screen (or pauses a running round) instead of
+    // leaving the page.
+    if (name !== "home") {
+      try {
+        if (!(history.state && history.state.mm)) history.pushState({ mm: 1 }, "");
+      } catch (e) { /* file:// or sandboxed — back button just leaves */ }
+    }
     // Lets the WebGL views (board3d.js / hero3d.js) pause rendering while off-screen.
     document.dispatchEvent(new CustomEvent("mm:screen", { detail: name }));
   }
@@ -91,7 +137,14 @@
     }, 2100);
   }
 
-  function playTone(freq, duration, type) {
+  function buzz(pattern) {
+    if (!data.haptics || !navigator.vibrate) return;
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) { /* not allowed — ignore */ }
+  }
+
+  function playTone(freq, duration, type, delay) {
     if (!data.soundOn) return;
     freq = freq || 440;
     duration = duration || 0.07;
@@ -99,23 +152,30 @@
     try {
       audioCtx =
         audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      // iOS/Chrome start the context suspended until a user gesture.
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var t0 = audioCtx.currentTime + (delay || 0);
       var o = audioCtx.createOscillator(),
         g = audioCtx.createGain();
       o.type = type;
       o.frequency.value = freq;
       var vol = 0.045 * (typeof data.volume === "number" ? data.volume : 0.7);
-      g.gain.setValueAtTime(vol, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(
-        0.001,
-        audioCtx.currentTime + duration,
-      );
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
       o.connect(g);
       g.connect(audioCtx.destination);
-      o.start();
-      o.stop(audioCtx.currentTime + duration);
+      o.start(t0);
+      o.stop(t0 + duration + 0.02);
     } catch (e) {
       /* audio unsupported — silently skip */
     }
+  }
+
+  function chord(freqs, gap, duration, type) {
+    freqs.forEach(function (f, k) {
+      playTone(f, duration, type, k * gap);
+    });
   }
 
   function stopTimers() {
@@ -129,8 +189,31 @@
     peekTimer = null;
   }
 
-  function tierColorStyle(level) {
-    return "--tier-color:var(" + level.tierColorVar + ")";
+  function tierColorStyle(l) {
+    return "--tier-color:var(" + l.tierColorVar + ")";
+  }
+
+  function totalStars() {
+    return Achievements.totalStars(data);
+  }
+
+  // A streak only counts while it's unbroken: last daily win today or yesterday.
+  function liveStreak() {
+    var d = data.daily;
+    if (!d.lastDate) return 0;
+    var gap = daysBetweenKeys(d.lastDate, todayKey());
+    return gap <= 1 ? d.streak || 0 : 0;
+  }
+
+  function shuffleInPlace(a, rand) {
+    rand = rand || Math.random;
+    for (var n = a.length - 1; n > 0; n--) {
+      var j = Math.floor(rand() * (n + 1));
+      var tmp = a[n];
+      a[n] = a[j];
+      a[j] = tmp;
+    }
+    return a;
   }
 
   /* ---------- mascot / combo / particles (feel-good feedback) ---------- */
@@ -157,6 +240,8 @@
     if (!el) return;
     if (combo > 1) {
       $("comboCount").textContent = "x" + combo;
+      el.classList.remove("show");
+      void el.offsetWidth;
       el.classList.add("show");
       el.classList.toggle("mega", combo >= 4);
     } else {
@@ -168,15 +253,37 @@
     return window.innerWidth <= 640;
   }
 
-  function burstAt(el) {
-    if (board3d) return; // the 3D board draws its own particle burst
-    var board = $("board"),
-      layer = $("particleLayer");
-    if (!board || !layer || !el) return;
+  function cardCenter(el) {
+    var board = $("board");
     var br = board.getBoundingClientRect(),
       er = el.getBoundingClientRect();
-    var cx = er.left - br.left + er.width / 2,
-      cy = er.top - br.top + er.height / 2;
+    return {
+      x: er.left - br.left + er.width / 2,
+      y: er.top - br.top + er.height / 2,
+    };
+  }
+
+  // Floating "+125" over the matched pair; works for both the 3D and DOM boards.
+  function floatScore(el, text, kind) {
+    var layer = $("particleLayer");
+    if (!layer || !el) return;
+    var c = cardCenter(el);
+    var f = document.createElement("span");
+    f.className = "float-score" + (kind ? " " + kind : "");
+    f.textContent = text;
+    f.style.left = c.x + "px";
+    f.style.top = c.y + "px";
+    layer.appendChild(f);
+    setTimeout(function () {
+      f.remove();
+    }, 1000);
+  }
+
+  function burstAt(el) {
+    if (board3d) return; // the 3D board draws its own particle burst
+    var layer = $("particleLayer");
+    if (!layer || !el) return;
+    var c = cardCenter(el);
     var colors = ["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"];
     var count = isSmallScreen() ? 6 : 10;
     for (var k = 0; k < count; k++) {
@@ -184,8 +291,8 @@
       p.className = "particle";
       var ang = Math.random() * Math.PI * 2,
         dist = 26 + Math.random() * 30;
-      p.style.left = cx + "px";
-      p.style.top = cy + "px";
+      p.style.left = c.x + "px";
+      p.style.top = c.y + "px";
       p.style.background = colors[k % colors.length];
       p.style.setProperty("--px", Math.cos(ang) * dist + "px");
       p.style.setProperty("--py", Math.sin(ang) * dist + "px");
@@ -205,8 +312,27 @@
   }
 
   function updateHomeStats() {
-    $("homeBest").textContent = data.bestScore || 0;
-    $("homeWins").textContent = data.totalWins || 0;
+    var stars = totalStars();
+    $("homeStars").textContent = stars;
+    $("homeWins").textContent = data.completed.length;
+    $("homeStarFill").style.width = (stars / (LEVELS.length * 3)) * 100 + "%";
+    var next = nextLevelIndex();
+    $("continueSub").textContent =
+      "Түвшин " + pad2(next + 1) + " · " + LEVELS[next].name;
+    var streak = liveStreak();
+    $("topStreakNum").textContent = streak;
+    $("topStreak").classList.toggle("on", streak > 0);
+    var earned = Object.keys(data.achv).length;
+    $("achvDot").hidden = earned <= (data.achvSeen || 0);
+  }
+
+  // The first unlocked level that isn't finished yet (or the last unlocked one).
+  function nextLevelIndex() {
+    var maxUnlocked = Math.min(data.unlocked, LEVELS.length) - 1;
+    for (var i = 0; i <= maxUnlocked; i++) {
+      if (data.completed.indexOf(i) < 0) return i;
+    }
+    return maxUnlocked;
   }
 
   /* ---------- level cards ---------- */
@@ -214,7 +340,8 @@
     var l = LEVELS[i];
     var unlocked = i < data.unlocked;
     var stars = data.stars[i] || 0;
-    var done = data.completed.includes(i);
+    var done = data.completed.indexOf(i) >= 0;
+    var current = unlocked && !done && i === nextLevelIndex();
     var pairCount = (l.rows * l.cols) / 2;
     var iconName = unlocked ? (done ? "check-circle" : l.tierIcon) : "lock";
     var iconClass =
@@ -225,42 +352,33 @@
       })
       .join("");
     var b = document.createElement("button");
-    b.className = "level-card";
+    b.className = "level-card" + (current ? " current" : "");
     b.disabled = !unlocked;
     b.style.cssText = tierColorStyle(l);
+    b.setAttribute(
+      "aria-label",
+      "Түвшин " + (i + 1) + ", " + l.name + (unlocked ? (done ? ", " + stars + " од" : "") : ", түгжээтэй"),
+    );
     b.innerHTML =
+      '<span class="level-top">' +
+      '<span class="' + iconClass + '">' + Icon(iconName) + "</span>" +
+      '<span class="level-num">' + pad2(i + 1) + "</span>" +
       (modIcons ? '<span class="level-mods">' + modIcons + "</span>" : "") +
-      '<span class="tier-pill">' +
-      l.tier +
       "</span>" +
-      '<span class="' +
-      iconClass +
-      '">' +
-      Icon(iconName) +
-      "</span>" +
-      "<strong>" +
-      String(i + 1).padStart(2, "0") +
-      ". " +
-      l.name +
-      "</strong>" +
-      "<small>" +
-      l.rows +
-      " × " +
-      l.cols +
-      " · " +
-      pairCount +
-      " хос<br>" +
-      fmt(l.time) +
-      " хугацаа</small>" +
-      '<div class="progress">' +
+      "<strong>" + l.name + "</strong>" +
+      "<small>" + l.rows + "×" + l.cols + " · " + pairCount + " хос · " + fmt(l.time) + "</small>" +
+      '<span class="progress">' +
       (unlocked
         ? done
-          ? "★".repeat(stars) + "☆".repeat(3 - stars)
-          : "НЭЭЛТТЭЙ"
-        : "ӨМНӨХ ТҮВШНИЙГ ДАВ") +
-      "</div>";
+          ? '<span class="stars">' + starsText(stars) + "</span>" +
+            (data.scores[i] ? '<span class="best">' + data.scores[i] + "</span>" : "")
+          : current
+            ? "ОДОО ТОГЛОХ ▸"
+            : "НЭЭЛТТЭЙ"
+        : "ТҮГЖЭЭТЭЙ") +
+      "</span>";
     b.addEventListener("click", function () {
-      startLevel(i);
+      startLevel(i, true);
     });
     attachTilt(b, { maxDeg: 8 });
     return b;
@@ -271,11 +389,35 @@
       all = $("allLevels");
     home.innerHTML = "";
     all.innerHTML = "";
-    [0, 1, 2, 3].forEach(function (i) {
-      home.appendChild(makeLevelCard(i));
-    });
-    LEVELS.forEach(function (_, i) {
-      all.appendChild(makeLevelCard(i));
+    // Home shows a 4-level window around the player's current progress.
+    var start = Math.max(0, Math.min(nextLevelIndex() - 1, LEVELS.length - 4));
+    for (var i = start; i < start + 4; i++) home.appendChild(makeLevelCard(i));
+
+    // Full list, grouped by tier.
+    var order = ["beginner", "simple", "medium", "hard", "master"];
+    order.forEach(function (key) {
+      var t = TIERS[key];
+      var idxs = [];
+      LEVELS.forEach(function (l, i) {
+        if (l.tierKey === key) idxs.push(i);
+      });
+      var got = idxs.reduce(function (a, i) {
+        return a + (data.stars[i] || 0);
+      }, 0);
+      var group = document.createElement("div");
+      group.className = "tier-group";
+      group.style.cssText = "--tier-color:var(" + t.color + ")";
+      group.innerHTML =
+        '<div class="tier-head"><span class="tier-ic">' + Icon(t.icon) + "</span>" +
+        "<b>" + t.label + "</b>" +
+        '<span class="tier-count">' + Icon("star") + got + "/" + idxs.length * 3 + "</span></div>";
+      var grid = document.createElement("div");
+      grid.className = "level-grid";
+      idxs.forEach(function (i) {
+        grid.appendChild(makeLevelCard(i));
+      });
+      group.appendChild(grid);
+      all.appendChild(group);
     });
     updateHomeStats();
   }
@@ -285,14 +427,24 @@
       streakEl = $("dailyStreakNum"),
       subEl = $("dailyBannerSub");
     if (!btn) return;
-    var d = data.daily || { streak: 0, lastDate: null, bestScore: 0 };
+    var d = data.daily;
     var playedToday = d.lastDate === todayKey();
-    streakEl.textContent = d.streak || 0;
+    var streak = liveStreak();
+    streakEl.textContent = streak;
+    $("dailyDone").hidden = !playedToday;
+    $("dailyBanner").classList.toggle("done", playedToday);
     subEl.textContent = playedToday
-      ? "Өнөөдрийн сорилтыг дуусгалаа! Дахин тоглож оноогоо сайжруулж болно."
-      : "Өдөр бүр шинэ 10 хос. Өдөр алгасалгүй тоглож, дараалсан өдрийн тоогоо ахиулаарай!";
+      ? "Өнөөдрийн сорилтыг дуусгалаа! Шилдэг оноо: " + (d.bestScore || 0) + ". Маргааш шинэ самбар гарна."
+      : streak > 0
+        ? "Өнөөдөр тоглоод " + (streak + 1) + " өдрийн дараалал руу ахиарай! 🔥"
+        : "Өдөр бүр шинэ 10 хос. Өдөр алгасалгүй тоглож, дараалсан өдрийн тоогоо ахиулаарай!";
     btn.innerHTML =
-      Icon("play") + " " + (playedToday ? "Дахин тоглох" : "Тоглох");
+      Icon(playedToday ? "rotate-ccw" : "play") + " " + (playedToday ? "Дахин" : "Тоглох");
+  }
+
+  function refreshHome() {
+    renderLevels();
+    renderDailyBanner();
   }
 
   /* ---------- level modifiers (special rules) ----------
@@ -329,15 +481,11 @@
         return !frozen[n] && !frozen[partnerOf(n)];
       });
     }
-    var order = cards.map(function (_, i) {
-      return i;
-    });
-    for (var n = order.length - 1; n > 0; n--) {
-      var j = Math.floor(Math.random() * (n + 1));
-      var tmp = order[n];
-      order[n] = order[j];
-      order[j] = tmp;
-    }
+    var order = shuffleInPlace(
+      cards.map(function (_, i) {
+        return i;
+      }),
+    );
     order.forEach(function (i) {
       if (count >= target) return;
       var touching = neighbors(i).some(function (n) {
@@ -381,6 +529,7 @@
       el.classList.remove("nudge");
     }, 420);
     playTone(220, 0.08, "square");
+    buzz(30);
     toast("Мөстэй хөзөр! Хажууд нь байгаа хөзрийн хосыг олбол мөс хайлна.", "snowflake");
   }
 
@@ -413,6 +562,7 @@
       swapCards(pair[0], pair[1]);
     });
     mascotSay("🌀", "Хөзрүүд холилдлоо!", true);
+    buzz([20, 40, 20]);
     toast(swaps.length * 2 + " хөзөр байраа солилоо — ажиглаарай!", "shuffle");
   }
 
@@ -434,13 +584,12 @@
     });
     if (board3d) board3d.swap(i, j);
     playTone(440, 0.07, "triangle");
-    setTimeout(function () {
-      playTone(660, 0.07, "triangle");
-    }, 90);
+    playTone(660, 0.07, "triangle", 0.09);
   }
 
   // Shows every face for tune.peek seconds before the clock starts.
   function startPeek() {
+    phase = "peek";
     lock = true;
     cards.forEach(function (c) {
       c.element.classList.add("flipped");
@@ -462,7 +611,8 @@
       });
       lock = false;
       mascotSay("🧠", "Эхэллээ!", true);
-      timer = setInterval(tick, 1000);
+      phase = "play";
+      runClock();
     }
     peekTimer = setTimeout(step, dealDelay);
   }
@@ -480,7 +630,8 @@
     row.innerHTML = "";
     list.forEach(function (key) {
       var m = MODIFIERS[key];
-      var chip = document.createElement("span");
+      var chip = document.createElement("button");
+      chip.type = "button";
       chip.className = "mod-chip mod-" + key;
       chip.title = m.desc(l.tuning || TUNING);
       chip.innerHTML =
@@ -489,65 +640,190 @@
         m.label +
         "</b>" +
         (key === "shuffle" ? '<small id="shuffleCount"></small>' : "");
+      chip.addEventListener("click", function () {
+        toast(m.desc(l.tuning || TUNING), m.icon);
+      });
       row.appendChild(chip);
     });
   }
 
+  /* ---------- board sizing ----------
+     Fit the whole board on one screen: the card grid is limited by the
+     available height as well as the width, so no level ever needs scrolling
+     on a phone. The 3D layer follows via its ResizeObserver. */
+  function fitBoard() {
+    var board = $("board");
+    if (!board || activeScreen() !== "game" || !boardRows) return;
+    var wrap = board.parentElement;
+    var cw = wrap.clientWidth;
+    if (!cw) return;
+    var gap = parseFloat(getComputedStyle(board).columnGap) || 8;
+    var top = board.getBoundingClientRect().top + window.scrollY;
+    var bar = $("actionBar");
+    var fixedBar = bar && getComputedStyle(bar).position === "fixed";
+    var reserve = fixedBar ? bar.offsetHeight + 14 : 28;
+    var availH = Math.max(fixedBar ? 220 : 420, window.innerHeight - top - reserve);
+    var cardH = (availH - gap * (boardRows - 1)) / boardRows;
+    var w = cardH * 0.82 * boardCols + gap * (boardCols - 1);
+    board.style.maxWidth = Math.floor(Math.max(200, Math.min(cw, w))) + "px";
+  }
+
+  var fitRaf = 0;
+  window.addEventListener("resize", function () {
+    cancelAnimationFrame(fitRaf);
+    fitRaf = requestAnimationFrame(fitBoard);
+  });
+
+  /* ---------- level sheet (intro + pause) ---------- */
+  function levelNumberLabel() {
+    return isDailyRound ? "ӨДРИЙН СОРИЛТ · " + todayKey() : "ТҮВШИН " + pad2(level + 1);
+  }
+
+  function renderSheetInfo(l) {
+    var pairCount = (l.rows * l.cols) / 2;
+    var threeStarMoves = Math.max(
+      pairCount,
+      Math.floor(pairCount * Scoring.STAR_THRESHOLDS.threeStarMoveRatio),
+    );
+    var threeStarTimePct = Math.round(Scoring.STAR_THRESHOLDS.threeStarTimeRatio * 100);
+    var best = isDailyRound ? data.daily.bestScore : data.scores[level];
+    var stars = isDailyRound ? 0 : data.stars[level] || 0;
+    $("sheetEyebrow").textContent = levelNumberLabel();
+    $("sheetTitle").textContent = l.name;
+    $("sheetFacts").innerHTML =
+      '<span style="' + tierColorStyle(l) + '" class="fact tier">' + Icon(l.tierIcon) + l.tier + "</span>" +
+      '<span class="fact">' + Icon("layers") + pairCount + " хос</span>" +
+      '<span class="fact">' + Icon("timer") + fmt(l.time) + "</span>" +
+      (best ? '<span class="fact gold">' + Icon("trophy") + best + "</span>" : "") +
+      (stars ? '<span class="fact gold">' + starsText(stars) + "</span>" : "");
+    var list = modList(l);
+    $("sheetMods").innerHTML = list
+      .map(function (k) {
+        var m = MODIFIERS[k];
+        return (
+          '<div class="sheet-mod mod-' + k + '"><span class="ic">' + Icon(m.icon) + "</span><div><b>" +
+          m.label + "</b><small>" + m.desc(l.tuning || TUNING) + "</small></div></div>"
+        );
+      })
+      .join("");
+    $("sheetGoal").innerHTML =
+      Icon("star") +
+      "<span><b>3 од:</b> " + threeStarMoves + " буюу түүнээс цөөн нүүдэл, хугацааны " +
+      threeStarTimePct + "%-иас илүүг үлдээ.</span>";
+  }
+
+  function sheetButton(cls, icon, label, fn) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.innerHTML = (icon ? Icon(icon) : "") + "<span>" + label + "</span>";
+    b.addEventListener("click", fn);
+    return b;
+  }
+
+  function openSheet(mode) {
+    var sheet = $("levelSheet");
+    sheet.setAttribute("data-mode", mode);
+    renderSheetInfo(levelDef);
+    var actions = $("sheetActions");
+    actions.innerHTML = "";
+    if (mode === "intro") {
+      actions.appendChild(sheetButton("primary big", "play", "Эхлэх", startFromIntro));
+      actions.appendChild(sheetButton("secondary", "arrow-left", "Буцах", goHome));
+    } else {
+      $("sheetEyebrow").textContent = "ТҮР ЗОГСЛОО · " + levelNumberLabel();
+      actions.appendChild(sheetButton("primary big", "play", "Үргэлжлүүлэх", resume));
+      actions.appendChild(sheetButton("secondary", "rotate-ccw", "Дахин эхлэх", function () {
+        closeSheet();
+        restart();
+      }));
+      actions.appendChild(
+        sheetButton("secondary", data.soundOn ? "volume-2" : "volume-x", data.soundOn ? "Дуу унтраах" : "Дуу асаах", function () {
+          applySound(!data.soundOn);
+          openSheet("pause");
+        }),
+      );
+      actions.appendChild(sheetButton("secondary danger", "home", "Гарах", goHome));
+    }
+    sheet.classList.add("open");
+    var primary = actions.querySelector(".primary");
+    if (primary) primary.focus({ preventScroll: true });
+  }
+
+  function closeSheet() {
+    $("levelSheet").classList.remove("open");
+  }
+
+  function sheetOpen() {
+    return $("levelSheet").classList.contains("open");
+  }
+
+  function startFromIntro() {
+    if (phase !== "intro") return;
+    closeSheet();
+    startClock();
+  }
+
   /* ---------- game flow ---------- */
-  function startLevel(i) {
+  function startLevel(i, withIntro) {
     isDailyRound = false;
     level = i;
-    beginRound(LEVELS[i]);
+    beginRound(LEVELS[i], withIntro);
   }
 
   function startDaily() {
     isDailyRound = true;
-    beginRound(DAILY_LEVEL);
+    beginRound(DAILY_LEVEL, true);
   }
 
-  function beginRound(l) {
+  function pickEmojis(pairCount) {
+    if (isDailyRound) {
+      // Same glyphs and same layout for everyone on the same calendar day.
+      return seededShuffle(EMOJIS.slice(0, BASE_EMOJI_POOL), "emoji-" + todayKey()).slice(0, pairCount);
+    }
+    var pool = EMOJIS.slice(0, Math.max(BASE_EMOJI_POOL, pairCount));
+    // Boss boards need every glyph; otherwise pick a fresh random set each round.
+    return shuffleInPlace(pool.slice()).slice(0, pairCount);
+  }
+
+  function beginRound(l, withIntro) {
+    if (phase !== "done" && phase !== "idle") data.stats.pairs += pairs;
     stopTimers();
     clearTimeout(resultTimer);
     resultTimer = null;
+    closeAllModals();
+    levelDef = l;
     timeLeft = l.time;
     totalTime = l.time;
     score = 0;
     moves = 0;
     pairs = 0;
     combo = 0;
+    maxCombo = 0;
+    pairPoints = 0;
+    hintPenalty = 0;
     first = null;
     second = null;
     lock = false;
-    paused = false;
     hintUsed = false;
-    startedAt = Date.now();
+    phase = "idle";
 
     var pairCount = (l.rows * l.cols) / 2;
-    var chosen = EMOJIS.slice(0, pairCount);
+    var chosen = pickEmojis(pairCount);
     var deck = [].concat(chosen, chosen).map(function (emoji, index) {
       return { emoji: emoji, id: index, matched: false, flipped: false };
     });
     // The Daily Challenge uses a date-seeded shuffle so every attempt that same
     // calendar day lands on the identical layout; normal levels stay random.
-    cards = isDailyRound
-      ? seededShuffle(deck, todayKey())
-      : (function () {
-          for (var n = deck.length - 1; n > 0; n--) {
-            var j = Math.floor(Math.random() * (n + 1));
-            var tmp = deck[n];
-            deck[n] = deck[j];
-            deck[j] = tmp;
-          }
-          return deck;
-        })();
+    cards = isDailyRound ? seededShuffle(deck, todayKey()) : shuffleInPlace(deck);
 
     mods = {};
     modList(l).forEach(function (k) {
       mods[k] = true;
     });
-    // Wide boss boards (7-8 columns) turn portrait on phones so cards stay tappable.
-    var portrait = l.cols > 6 && window.innerWidth < 640;
-    var rows = portrait ? l.cols : l.rows;
+    // Wide boards turn portrait on narrow portrait screens so cards stay tappable.
+    var portrait = l.cols > l.rows && window.innerWidth < 640 && window.innerHeight > window.innerWidth;
+    boardRows = portrait ? l.cols : l.rows;
     boardCols = portrait ? l.rows : l.cols;
     tune = l.tuning || TUNING;
     missesSinceShuffle = 0;
@@ -562,12 +838,12 @@
 
     $("levelBadgeName").textContent = isDailyRound
       ? l.name
-      : String(level + 1).padStart(2, "0") + ". " + l.name;
+      : pad2(level + 1) + ". " + l.name;
     $("levelBadgeSub").textContent =
-      rows + "×" + boardCols + " самбар · " + pairCount + " хос";
+      boardRows + "×" + boardCols + " самбар · " + pairCount + " хос";
     var tierTag = $("levelTierTag");
     tierTag.textContent = l.tier;
-    tierTag.parentElement.style.cssText = tierColorStyle(l);
+    $("levelBadge").style.cssText = tierColorStyle(l);
     $("goalText").textContent =
       pairCount + " хосыг " + fmt(l.time) + " дотор ол.";
     var threeStarMoves = Math.max(
@@ -601,9 +877,12 @@
 
     var board = $("board");
     board.innerHTML = "";
+    board.classList.remove("paused");
     board.style.gridTemplateColumns = "repeat(" + boardCols + ",minmax(0,1fr))";
+    board.setAttribute("data-cols", boardCols);
     cards.forEach(function (c, index) {
       var btn = document.createElement("button");
+      btn.type = "button";
       btn.className =
         "memory-card" + (c.golden ? " golden" : "") + (c.frozen ? " frozen" : "");
       btn.setAttribute("aria-label", c.frozen ? "Мөстэй хөзөр" : "Нуугдсан хөзөр");
@@ -611,8 +890,14 @@
         '<span class="card-inner"><span class="card-face card-back"><span>✦</span></span><span class="card-face card-front">' +
         c.emoji +
         "</span></span>";
-      btn.addEventListener("click", function () {
-        flipCard(index, btn);
+      // pointerdown reacts faster than click on touch screens; keyboard and
+      // assistive-tech activations arrive as clicks with detail 0.
+      btn.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        flipCard(index);
+      });
+      btn.addEventListener("click", function (e) {
+        if (e.detail === 0) flipCard(index);
       });
       c.element = btn;
       board.appendChild(btn);
@@ -623,11 +908,13 @@
     board.appendChild(particleLayer);
 
     $("pauseIcon").innerHTML = Icon("pause");
-    $("pauseLabel").textContent = "Түр зогсоох";
+    $("pauseLabel").textContent = "Зогсоох";
+    updateHintBadge();
     updateComboBadge();
     mascotSay("🧠", "Бэлэн үү?", false);
     updateMetrics();
     showScreen("game");
+    fitBoard();
     // Mount after the screen is visible so the 3D layer can measure the card grid.
     board3d = Board3D ? Board3D.mount(board, cards) : null;
     if (!board3d) {
@@ -640,37 +927,78 @@
         });
       });
     }
-    if (mods.peek) {
-      startPeek();
+    if (withIntro) {
+      phase = "intro";
+      openSheet("intro");
     } else {
-      if (modList(l).length) {
-        mascotSay(
-          "🧠",
-          "Шинэ дүрэм: " +
-            modList(l)
-              .map(function (k) {
-                return MODIFIERS[k].label;
-              })
-              .join(", "),
-          false,
-        );
-      }
-      timer = setInterval(tick, 1000);
+      startClock();
     }
   }
 
-  function flipCard(i, btn) {
-    if (paused || lock || !timer || cards[i].matched || cards[i].flipped)
+  function startClock() {
+    data.stats.games++;
+    save();
+    if (mods.peek) {
+      startPeek();
       return;
+    }
+    phase = "play";
+    if (modList(levelDef).length) {
+      mascotSay(
+        "🧠",
+        "Шинэ дүрэм: " +
+          modList(levelDef)
+            .map(function (k) {
+              return MODIFIERS[k].label;
+            })
+            .join(", "),
+        false,
+      );
+    } else {
+      mascotSay("🧠", "Эхэллээ!", true);
+    }
+    runClock();
+  }
+
+  function runClock() {
+    clearInterval(timer);
+    timer = setInterval(tick, 1000);
+  }
+
+  // Closes a mismatched pair right away (when the player taps a third card
+  // instead of waiting out the delay).
+  function resolveMismatch() {
+    if (!mismatchTimer) return;
+    clearTimeout(mismatchTimer);
+    mismatchTimer = null;
+    var a = cards[first],
+      b = cards[second];
+    [a, b].forEach(function (c) {
+      c.flipped = false;
+      c.element.classList.remove("flipped", "shake");
+      c.element.setAttribute("aria-label", c.frozen ? "Мөстэй хөзөр" : "Нуугдсан хөзөр");
+    });
+    first = second = null;
+    lock = false;
+    maybeShuffle();
+  }
+
+  function flipCard(i) {
+    if (phase !== "play" || cards[i].matched) return;
+    // Tapping during the mismatch delay closes that pair at once — including
+    // a tap on one of the two wrong cards, which then flips as a fresh pick.
+    if (mismatchTimer && lock) resolveMismatch();
+    if (lock || cards[i].flipped) return;
     if (cards[i].frozen) {
       nudge(i);
       return;
     }
-    if (!startedAt) startedAt = Date.now();
+    var btn = cards[i].element;
     cards[i].flipped = true;
     btn.classList.add("flipped");
     btn.setAttribute("aria-label", cards[i].emoji);
     playTone(520, 0.05);
+    buzz(8);
 
     if (first === null) {
       first = i;
@@ -691,58 +1019,53 @@
       a.element.disabled = b.element.disabled = true;
       pairs++;
       combo++;
+      maxCombo = Math.max(maxCombo, combo);
       var gained = Scoring.pairScore(combo);
       score += gained;
-      playTone(760, 0.12, "triangle");
+      pairPoints += gained;
+      // Rising pitch with the combo makes streaks feel good.
+      var lift = Math.min(combo - 1, 6) * 60;
+      chord([660 + lift, 880 + lift], 0.07, 0.14, "triangle");
+      buzz(combo > 1 ? [15, 30, 25] : 20);
       burstAt(a.element);
       burstAt(b.element);
+      floatScore(b.element, "+" + gained, a.golden ? "gold" : combo > 1 ? "combo" : "");
       updateComboBadge();
       first = second = null;
       lock = false;
       var extra = "";
       if (a.golden) {
         timeLeft += tune.goldenBonus;
-        extra += " · +" + tune.goldenBonus + " сек";
-        playTone(1046, 0.18, "triangle");
+        extra += "+" + tune.goldenBonus + " сек";
+        playTone(1046, 0.18, "triangle", 0.12);
+        floatScore(a.element, "+" + tune.goldenBonus + "с", "time");
       }
-      if (mods.frozen && thawAround([ia, ib])) extra += " · мөс хайллаа";
+      var thawed = mods.frozen && thawAround([ia, ib]);
       updateMetrics();
       if (pairs === cards.length / 2) {
         finish(true);
         return;
       }
       if (a.golden) {
-        mascotSay("⚡", "Алтан хос! +" + tune.goldenBonus + " сек", true);
+        mascotSay("⚡", "Алтан хос! " + extra, true);
+        toast("Алтан хос! " + extra, "zap");
+      } else if (thawed) {
+        mascotSay("❄️", "Мөс хайллаа!", true);
       } else if (combo > 1) {
-        mascotSay("🤩", combo + " хос дараалан!", true);
+        mascotSay(combo >= 4 ? "🔥" : "🤩", combo + " хос дараалан!", true);
       } else {
-        mascotSay("😊", "Сайн байна!", true);
+        mascotSay("😊", ["Сайн байна!", "Зөв!", "Гоё!", "Яг таг!"][pairs % 4], true);
       }
-      toast(
-        (a.golden
-          ? "Алтан хос! +" + gained
-          : combo > 1
-            ? combo + " дараалсан хос! +" + gained
-            : "Зөв хос! +" + gained) + extra,
-        a.golden ? "zap" : combo > 1 ? "flame" : "sparkles",
-      );
     } else {
       combo = 0;
       if (mods.shuffle) missesSinceShuffle++;
       updateComboBadge();
       mascotSay("🤔", "Дахиад оролдооч", false);
+      playTone(300, 0.09, "sine");
+      buzz(40);
       a.element.classList.add("shake");
       b.element.classList.add("shake");
-      mismatchTimer = setTimeout(function () {
-        a.flipped = b.flipped = false;
-        a.element.classList.remove("flipped", "shake");
-        b.element.classList.remove("flipped", "shake");
-        a.element.setAttribute("aria-label", "Нуугдсан хөзөр");
-        b.element.setAttribute("aria-label", "Нуугдсан хөзөр");
-        first = second = null;
-        lock = false;
-        maybeShuffle();
-      }, 750);
+      mismatchTimer = setTimeout(resolveMismatch, MISMATCH_MS);
       updateMetrics();
     }
   }
@@ -758,16 +1081,20 @@
     var shuffleCount = $("shuffleCount");
     if (shuffleCount)
       shuffleCount.textContent = missesSinceShuffle + "/" + tune.shuffleEvery;
-    $("timerFill").classList.toggle(
-      "low",
-      timeLeft <= Math.max(10, totalTime * 0.22),
-    );
+    var low = timeLeft <= Math.max(10, totalTime * 0.22);
+    $("timerFill").classList.toggle("low", low);
+    $("timeStat").classList.toggle("low", low && phase === "play");
   }
 
   function tick() {
-    if (paused) return;
+    if (phase !== "play") return;
     timeLeft--;
+    data.stats.playSeconds++;
     updateMetrics();
+    if (timeLeft > 0 && timeLeft <= 5) {
+      playTone(timeLeft === 1 ? 990 : 820, 0.05, "square");
+      if (timeLeft <= 3) buzz(15);
+    }
     if (timeLeft <= 0) {
       timeLeft = 0;
       updateMetrics();
@@ -775,20 +1102,37 @@
     }
   }
 
+  function updateHintBadge() {
+    var badge = $("hintBadge");
+    badge.textContent = hintUsed ? "0" : "1";
+    $("hintBtn").classList.toggle("used", hintUsed);
+  }
+
   function finish(won) {
     stopTimers();
     lock = true;
-    paused = false;
+    phase = "done";
+    closeSheet();
     var elapsed = totalTime - timeLeft;
     var pairCount = cards.length / 2;
     var stars = won
       ? Scoring.calcStars(moves, pairCount, timeLeft, totalTime)
       : 0;
     var streakMsg = "";
+    var timeBonus = 0,
+      effBonus = 0,
+      newRecord = false;
+
+    data.stats.pairs += pairs;
+    data.stats.bestCombo = Math.max(data.stats.bestCombo || 0, maxCombo);
 
     if (won) {
-      score += Scoring.timeBonus(timeLeft);
-      score += Scoring.efficiencyBonus(moves, pairCount);
+      timeBonus = Scoring.timeBonus(timeLeft);
+      effBonus = Scoring.efficiencyBonus(moves, pairCount);
+      score += timeBonus + effBonus;
+      data.stats.wins++;
+      if (moves === pairCount) data.stats.perfect++;
+      if (!hintUsed) data.stats.noHintWins++;
 
       if (isDailyRound) {
         var today = todayKey();
@@ -798,34 +1142,94 @@
             : null;
           data.daily.streak = gap === 1 ? data.daily.streak + 1 : 1;
           data.daily.lastDate = today;
+          data.daily.bestScore = 0; // best score is per day
         }
+        data.daily.bestStreak = Math.max(data.daily.bestStreak || 0, data.daily.streak);
+        newRecord = score > (data.daily.bestScore || 0) && data.daily.bestScore > 0;
         data.daily.bestScore = Math.max(data.daily.bestScore || 0, score);
-        streakMsg = " " + data.daily.streak + " өдөр дараалан тогллоо!";
+        streakMsg = " " + data.daily.streak + " өдөр дараалан тогллоо! 🔥";
       } else {
+        newRecord = score > (data.scores[level] || 0) && (data.scores[level] || 0) > 0;
         data.bestScore = Math.max(data.bestScore, score);
         data.unlocked = Math.max(
           data.unlocked,
           Math.min(LEVELS.length, level + 2),
         );
-        if (!data.completed.includes(level)) {
+        if (data.completed.indexOf(level) < 0) {
           data.completed.push(level);
           data.totalWins++;
         }
         data.stars[level] = Math.max(data.stars[level] || 0, stars);
         data.scores[level] = Math.max(data.scores[level] || 0, score);
       }
-      save();
-      playTone(880, 0.22, "triangle");
+      chord([523, 659, 784, 1046], 0.1, 0.24, "triangle");
+      buzz([30, 60, 30, 60, 80]);
       mascotSay(
         stars === 3 ? "🏆" : stars === 2 ? "🌟" : "🎉",
         isDailyRound ? "Өдрийн сорилт!" : "Чи яллаа!",
         true,
       );
     } else {
-      playTone(180, 0.3, "sawtooth");
+      chord([330, 262, 196], 0.14, 0.26, "sine");
+      buzz([80, 60, 120]);
       mascotSay("😮", "Дахин оролдоё", false);
     }
 
+    var fresh = Achievements.check(
+      data,
+      {
+        won: won,
+        daily: isDailyRound,
+        tierKey: levelDef.tierKey,
+        moves: moves,
+        pairCount: pairCount,
+        hintUsed: hintUsed,
+        timeLeft: timeLeft,
+        totalTime: totalTime,
+        stars: stars,
+      },
+      todayKey(),
+    );
+    save();
+
+    lastResult = {
+      won: won,
+      daily: isDailyRound,
+      level: level,
+      name: levelDef.name,
+      score: score,
+      stars: stars,
+      moves: moves,
+      elapsed: elapsed,
+    };
+    renderResult(won, stars, elapsed, {
+      pairPoints: pairPoints,
+      timeBonus: timeBonus,
+      effBonus: effBonus,
+      hintPenalty: hintPenalty,
+      newRecord: newRecord,
+      streakMsg: streakMsg,
+      fresh: fresh,
+    });
+
+    refreshHome();
+    function reveal() {
+      resultTimer = null;
+      showScreen("result");
+      animateResultStars(stars);
+      if (won && stars >= 2) fireConfetti();
+    }
+    // Results/progress are already saved above; on a 3D win we only hold the
+    // result screen briefly so the board's celebration wave can play.
+    if (won && board3d && !reducedMotion()) {
+      board3d.celebrate();
+      resultTimer = setTimeout(reveal, 1150);
+    } else {
+      resultTimer = setTimeout(reveal, won ? 350 : 600);
+    }
+  }
+
+  function renderResult(won, stars, elapsed, info) {
     $("resultIcon").innerHTML = Icon(
       won
         ? stars === 3
@@ -835,10 +1239,11 @@
             : "sparkles"
         : "hourglass",
     );
+    $("resultIcon").classList.toggle("lost", !won);
     $("resultEyebrow").textContent = won
       ? isDailyRound
         ? "ӨДРИЙН СОРИЛТЫГ ДАВЛАА"
-        : "ТҮВШНИЙГ ДАВЛАА"
+        : "ТҮВШИН " + pad2(level + 1) + " ДАВЛАА"
       : "ДАХИН ОРОЛДООД ҮЗ!";
     $("resultTitle").textContent = won
       ? stars === 3
@@ -849,49 +1254,82 @@
       : "Хугацаа дууслаа";
     $("resultMessage").textContent = won
       ? isDailyRound
-        ? "Өнөөдрийн сорилтыг амжилттай дуусгалаа!" + streakMsg
-        : LEVELS[level].name +
+        ? "Өнөөдрийн сорилтыг амжилттай дуусгалаа!" + info.streakMsg
+        : levelDef.name +
           " түвшнийг амжилттай давлаа! " +
           (level === LEVELS.length - 1
             ? "Чи жинхэнэ Memory Legend боллоо!"
-            : "Дараагийн түвшин чамайг хүлээж байна.")
-      : "Бага зэрэг амраад дахин оролдоорой. Хосуудын байрлалыг тогтоох нь амжилтын түлхүүр!";
+            : stars < 3
+              ? "Цөөн нүүдлээр, хурдан дуусгавал 3 од авна."
+              : "Дараагийн түвшин чамайг хүлээж байна.")
+      : pairs +
+        "/" +
+        cards.length / 2 +
+        " хос оллоо. Бага зэрэг амраад дахин оролдоорой — хосуудын байрлалыг тогтоох нь амжилтын түлхүүр!";
     $("resultScore").textContent = score;
     $("resultTime").textContent = fmt(elapsed);
-    $("resultStars").textContent = won
-      ? "★".repeat(stars) + "☆".repeat(3 - stars)
-      : "—";
-    $("nextBtn").style.display =
-      won && !isDailyRound && level < LEVELS.length - 1
-        ? "inline-block"
-        : "none";
+    $("resultMoves").textContent = moves;
+    $("resultStars").innerHTML = won
+      ? [0, 1, 2]
+          .map(function (k) {
+            return '<span class="rs" data-k="' + k + '">' + Icon("star") + "</span>";
+          })
+          .join("")
+      : "";
+    $("recordBadge").hidden = !info.newRecord;
 
-    renderLevels();
-    renderDailyBanner();
-    function reveal() {
-      resultTimer = null;
-      showScreen("result");
-      if (won && stars >= 2) fireConfetti();
+    var rows = [["Хос олсон оноо", info.pairPoints]];
+    if (won) {
+      rows.push(["Хугацааны урамшуулал", info.timeBonus]);
+      rows.push(["Цөөн нүүдлийн урамшуулал", info.effBonus]);
     }
-    // Results/progress are already saved above; on a 3D win we only hold the
-    // result screen briefly so the board's celebration wave can play.
-    if (
-      won &&
-      board3d &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      board3d.celebrate();
-      resultTimer = setTimeout(reveal, 1150);
-    } else {
-      reveal();
-    }
+    if (info.hintPenalty) rows.push(["Тусламж", -info.hintPenalty]);
+    if (maxCombo > 1) rows.push(["Хамгийн урт цуврал", "x" + maxCombo]);
+    $("resultBreakdown").innerHTML = rows
+      .map(function (r) {
+        var v = r[1];
+        var txt = typeof v === "number" ? (v > 0 ? "+" + v : String(v)) : v;
+        var cls = typeof v === "number" ? (v < 0 ? "neg" : v > 0 ? "pos" : "") : "";
+        return "<li><span>" + r[0] + '</span><b class="' + cls + '">' + txt + "</b></li>";
+      })
+      .join("");
+
+    var achv = $("resultAchv");
+    achv.hidden = !info.fresh.length;
+    achv.innerHTML = info.fresh.length
+      ? '<div class="new-achv-title">' + Icon("medal") + " Шинэ шагнал!</div>" +
+        info.fresh
+          .map(function (a) {
+            return '<div class="new-achv-item">' + Icon(a.icon) + "<div><b>" + a.title + "</b><small>" + a.desc + "</small></div></div>";
+          })
+          .join("")
+      : "";
+
+    var canNext = won && !isDailyRound && level < LEVELS.length - 1;
+    $("nextBtn").style.display = canNext ? "" : "none";
+    $("replayBtn").classList.toggle("primary", !canNext);
+    $("replayBtn").classList.toggle("secondary", canNext);
+  }
+
+  function animateResultStars(stars) {
+    var els = document.querySelectorAll("#resultStars .rs");
+    els.forEach(function (el, k) {
+      el.classList.remove("on");
+      if (k < stars) {
+        setTimeout(function () {
+          el.classList.add("on");
+          playTone(700 + k * 180, 0.12, "triangle");
+        }, reducedMotion() ? 0 : 250 + k * 280);
+      }
+    });
   }
 
   function fireConfetti() {
     var layer = $("confettiLayer");
     layer.innerHTML = "";
+    if (reducedMotion()) return;
     var colors = ["#5ee7ff", "#9c72ff", "#ffd35a", "#ff5a86", "#34d399"];
-    var count = isSmallScreen() ? 24 : 46;
+    var count = isSmallScreen() ? 28 : 50;
     for (var k = 0; k < count; k++) {
       var piece = document.createElement("span");
       piece.className = "confetti-piece";
@@ -909,42 +1347,113 @@
     }, 3200);
   }
 
-  function restart() {
-    if (isDailyRound) {
-      startDaily();
+  function shareResult() {
+    if (!lastResult) return;
+    var r = lastResult;
+    var title = r.daily ? "Өдрийн сорилт " + todayKey() : "Түвшин " + pad2(r.level + 1) + " · " + r.name;
+    var text =
+      "🧠 Memory Master — " + title + "\n" +
+      (r.won ? starsText(r.stars) + " · " : "") +
+      r.score + " оноо · " + r.moves + " нүүдэл · " + fmt(r.elapsed);
+    var url = location.protocol.indexOf("http") === 0 ? location.href.split("#")[0] : "";
+    if (navigator.share) {
+      navigator.share({ title: "Memory Master", text: text, url: url || undefined }).catch(function () {});
+      return;
+    }
+    var full = text + (url ? "\n" + url : "");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(full).then(
+        function () {
+          toast("Үр дүнг хуулж авлаа!", "copy");
+        },
+        function () {
+          toast("Хуулж чадсангүй", "x");
+        },
+      );
     } else {
-      startLevel(level);
+      toast(text, "share");
     }
   }
-  function quit() {
+
+  function restart() {
+    if (isDailyRound) {
+      isDailyRound = true;
+      beginRound(DAILY_LEVEL, false);
+    } else {
+      startLevel(level, false);
+    }
+  }
+
+  function stopRound() {
     stopTimers();
     clearTimeout(resultTimer);
     resultTimer = null;
+    if (phase !== "done" && phase !== "idle") {
+      data.stats.pairs += pairs;
+      save();
+    }
+    phase = "idle";
+    $("board").classList.remove("paused");
+  }
+
+  function showHome() {
+    closeAllModals();
     showScreen("home");
-    renderLevels();
-    renderDailyBanner();
+    refreshHome();
+  }
+
+  function goHome() {
+    stopRound();
+    closeAllModals();
+    var inApp = false;
+    try {
+      inApp = !!(history.state && history.state.mm);
+    } catch (e) { /* ignore */ }
+    if (inApp) history.back(); // popstate → showHome()
+    else showHome();
+  }
+
+  function pause() {
+    if (phase !== "play") return;
+    phase = "paused";
+    clearInterval(timer);
+    timer = null;
+    $("board").classList.add("paused");
+    $("pauseIcon").innerHTML = Icon("play");
+    $("pauseLabel").textContent = "Үргэлжлүүлэх";
+    openSheet("pause");
+  }
+
+  function resume() {
+    if (phase !== "paused") return;
+    closeSheet();
+    phase = "play";
+    $("board").classList.remove("paused");
+    $("pauseIcon").innerHTML = Icon("pause");
+    $("pauseLabel").textContent = "Зогсоох";
+    runClock();
   }
 
   function togglePause() {
-    if (!timer && !paused) return;
-    paused = !paused;
-    $("pauseIcon").innerHTML = Icon(paused ? "play" : "pause");
-    $("pauseLabel").textContent = paused ? "Үргэлжлүүлэх" : "Түр зогсоох";
-    if (paused) {
-      clearInterval(timer);
-      timer = null;
-      toast("Тоглоом түр зогслоо", "pause");
-    } else {
-      timer = setInterval(tick, 1000);
-      toast("Үргэлжлүүллээ", "play");
-    }
+    if (phase === "play") pause();
+    else if (phase === "paused") resume();
   }
 
   function hint() {
-    if (paused || lock || !timer) return;
+    if (phase !== "play") return;
+    if (lock && mismatchTimer) resolveMismatch();
+    if (lock) return;
     if (hintUsed) {
       toast("Тусламжийг түвшин бүрт зөвхөн нэг удаа ашиглана.", "lock");
       return;
+    }
+    // Hide a lone face-up pick first so the hint can't be mistaken for it.
+    if (first !== null) {
+      var c0 = cards[first];
+      c0.flipped = false;
+      c0.element.classList.remove("flipped");
+      c0.element.setAttribute("aria-label", "Нуугдсан хөзөр");
+      first = null;
     }
     var unmatched = cards
       .map(function (c, i) {
@@ -970,11 +1479,14 @@
       ) || findPair(unmatched);
     if (!pair) return;
     hintUsed = true;
+    updateHintBadge();
     mascotSay("💡", "Энд хараарай!", true);
     lock = true; // block real picks while the hint is peeking, so a tap on a hinted
     // card can't become the player's real "first" pick mid-reveal and
     // then get its flipped state silently wiped by the cleanup below.
-    score = Math.max(0, score - 50);
+    var before = score;
+    score = Math.max(0, score - HINT_COST);
+    hintPenalty += before - score;
     pair.forEach(function (c) {
       c.element.classList.add("flipped");
     });
@@ -985,28 +1497,52 @@
       });
       lock = false;
       hintTimer = null;
-    }, 850);
+    }, 1000);
     updateMetrics();
-    toast("Тусламж ашиглалаа: -50 оноо", "sparkles");
+    toast("Тусламж ашиглалаа: -" + HINT_COST + " оноо", "lightbulb");
   }
 
   /* ---------- modals ---------- */
   function openModal(id) {
     $(id).classList.add("open");
+    var close = $(id).querySelector(".modal-close");
+    if (close) close.focus({ preventScroll: true });
   }
+  // Generic modals only — the level sheet is driven by the round state.
   function closeModals() {
-    document.querySelectorAll(".modal-backdrop").forEach(function (m) {
+    document.querySelectorAll(".modal-backdrop:not(#levelSheet)").forEach(function (m) {
       m.classList.remove("open");
     });
   }
+  function closeAllModals() {
+    closeModals();
+    closeSheet();
+  }
+  function anyModalOpen() {
+    return !!document.querySelector(".modal-backdrop.open:not(#levelSheet)");
+  }
 
   function renderAchievements() {
-    var totalStars = Object.values(data.stars).reduce(function (a, b) {
-      return a + b;
-    }, 0);
-    $("achvStars").textContent = totalStars + " / " + LEVELS.length * 3;
+    var stars = totalStars();
+    $("achvStars").textContent = stars + " / " + LEVELS.length * 3;
     $("achvLevels").textContent = data.completed.length + " / " + LEVELS.length;
     $("achvScore").textContent = data.bestScore || 0;
+
+    var s = data.stats;
+    var mins = Math.round((s.playSeconds || 0) / 60);
+    var statRows = [
+      ["play", "Тоглосон", s.games],
+      ["trophy", "Ялалт", s.wins],
+      ["copy", "Олсон хос", s.pairs],
+      ["flame", "Шилдэг цуврал", "x" + (s.bestCombo || 0)],
+      ["calendar", "Шилдэг дараалал", (data.daily.bestStreak || 0) + " өдөр"],
+      ["timer", "Тоглосон хугацаа", mins + " мин"],
+    ];
+    $("statList").innerHTML = statRows
+      .map(function (r) {
+        return '<div class="stat-item">' + Icon(r[0]) + "<span>" + r[1] + "</span><b>" + r[2] + "</b></div>";
+      })
+      .join("");
 
     var order = ["beginner", "simple", "medium", "hard", "master"];
     var wrap = $("tierBadges");
@@ -1020,7 +1556,7 @@
       var earned =
         idxs.length > 0 &&
         idxs.every(function (i) {
-          return data.completed.includes(i);
+          return data.completed.indexOf(i) >= 0;
         });
       var t = TIERS[key];
       var el = document.createElement("div");
@@ -1029,6 +1565,22 @@
       el.innerHTML = '<span class="ic">' + Icon(t.icon) + "</span>" + t.label;
       wrap.appendChild(el);
     });
+
+    var list = Achievements.LIST;
+    var earnedCount = 0;
+    $("achvList").innerHTML = list
+      .map(function (a) {
+        var got = !!data.achv[a.id];
+        if (got) earnedCount++;
+        return (
+          '<div class="achv-item' + (got ? " earned" : "") + '"><span class="ic">' + Icon(got ? a.icon : "lock") +
+          "</span><div><b>" + a.title + "</b><small>" + a.desc + "</small></div></div>"
+        );
+      })
+      .join("");
+    $("achvCount").textContent = earnedCount + "/" + list.length;
+    data.achvSeen = earnedCount;
+    save();
   }
 
   function renderRating() {
@@ -1039,6 +1591,7 @@
       var stars = data.stars[i] || 0;
       var best = data.scores[i] || 0;
       var li = document.createElement("li");
+      li.style.cssText = tierColorStyle(l);
       li.innerHTML =
         '<span class="rl-name">' +
         Icon(unlocked ? l.tierIcon : "lock") +
@@ -1048,7 +1601,7 @@
         l.name +
         "</span>" +
         '<span class="rl-stars">' +
-        (unlocked ? "★".repeat(stars) + "☆".repeat(3 - stars) : "—") +
+        (unlocked ? starsText(stars) : "—") +
         "</span>" +
         '<span class="rl-score">' +
         best +
@@ -1058,11 +1611,25 @@
   }
 
   /* ---------- settings ---------- */
-  function applyTheme(theme) {
-    data.theme = theme;
+  function systemTheme() {
+    try {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch (e) {
+      return "dark";
+    }
+  }
+
+  function setThemeAttr(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     $("themeDarkBtn").classList.toggle("active", theme === "dark");
     $("themeLightBtn").classList.toggle("active", theme === "light");
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme === "light" ? "#eef1fb" : "#080b20");
+  }
+
+  function applyTheme(theme) {
+    data.theme = theme;
+    setThemeAttr(theme);
     save();
   }
 
@@ -1070,8 +1637,17 @@
     data.soundOn = on;
     $("soundBtn").innerHTML = Icon(on ? "volume-2" : "volume-x");
     $("soundToggle").classList.toggle("on", on);
+    $("soundToggle").setAttribute("aria-checked", String(on));
     save();
     if (on) playTone(600, 0.08);
+  }
+
+  function applyHaptics(on) {
+    data.haptics = on;
+    $("hapticToggle").classList.toggle("on", on);
+    $("hapticToggle").setAttribute("aria-checked", String(on));
+    save();
+    if (on) buzz(25);
   }
 
   function applyVolume(v) {
@@ -1080,31 +1656,61 @@
     save();
   }
 
+  var resetArmed = false,
+    resetTimer = null;
+  function onResetClick() {
+    if (!resetArmed) {
+      resetArmed = true;
+      $("resetBtn").classList.add("armed");
+      $("resetLabel").textContent = "Итгэлтэй байна уу? Дахин дар";
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(disarmReset, 4000);
+      return;
+    }
+    disarmReset();
+    var keep = { theme: data.theme, soundOn: data.soundOn, volume: data.volume, haptics: data.haptics };
+    Storage.reset();
+    data = Object.assign(Storage.defaults(), keep);
+    save();
+    closeModals();
+    refreshHome();
+    toast("Ахиц устгагдлаа. Шинээр эхэлцгээе!", "rotate-ccw");
+  }
+  function disarmReset() {
+    resetArmed = false;
+    clearTimeout(resetTimer);
+    $("resetBtn").classList.remove("armed");
+    $("resetLabel").textContent = "Ахицыг устгах";
+  }
+
   /* ---------- wire up ---------- */
   $("continueBtn").addEventListener("click", function () {
-    startLevel(Math.max(0, Math.min(data.unlocked - 1, LEVELS.length - 1)));
+    startLevel(nextLevelIndex(), true);
   });
   $("allLevelsBtn").addEventListener("click", function () {
     showScreen("levels");
   });
-  $("backHomeBtn").addEventListener("click", function () {
-    showScreen("home");
+  $("backHomeBtn").addEventListener("click", goHome);
+  $("brandBtn").addEventListener("click", function () {
+    if (activeScreen() === "game" && phase === "play") pause();
+    else if (activeScreen() !== "home" && activeScreen() !== "game") goHome();
   });
 
-  $("quitBtn").addEventListener("click", quit);
+  $("quitBtn").addEventListener("click", function () {
+    if (phase === "play") pause();
+    else if (phase === "paused") openSheet("pause");
+    else goHome();
+  });
   $("restartBtn").addEventListener("click", restart);
   $("pauseBtn").addEventListener("click", togglePause);
   $("hintBtn").addEventListener("click", hint);
 
   $("nextBtn").addEventListener("click", function () {
-    startLevel(Math.min(level + 1, LEVELS.length - 1));
+    startLevel(Math.min(level + 1, LEVELS.length - 1), true);
   });
   $("replayBtn").addEventListener("click", restart);
-  $("resultHomeBtn").addEventListener("click", function () {
-    showScreen("home");
-    renderLevels();
-    renderDailyBanner();
-  });
+  $("shareBtn").addEventListener("click", shareResult);
+  $("resultHomeBtn").addEventListener("click", goHome);
   $("dailyPlayBtn").addEventListener("click", startDaily);
 
   $("soundBtn").addEventListener("click", function () {
@@ -1113,9 +1719,15 @@
   $("soundToggle").addEventListener("click", function () {
     applySound(!data.soundOn);
   });
+  $("hapticToggle").addEventListener("click", function () {
+    applyHaptics(!data.haptics);
+  });
+  $("resetBtn").addEventListener("click", onResetClick);
 
   $("settingsBtn").addEventListener("click", function () {
+    if (phase === "play") pause();
     $("savedHighScore").textContent = data.bestScore || 0;
+    disarmReset();
     openModal("settingsBackdrop");
   });
   $("rateBtn").addEventListener("click", function () {
@@ -1124,6 +1736,7 @@
   });
   $("achvBtn").addEventListener("click", function () {
     renderAchievements();
+    updateHomeStats();
     openModal("achvBackdrop");
   });
   $("helpBtn").addEventListener("click", function () {
@@ -1133,10 +1746,14 @@
   document.querySelectorAll(".js-modal-close").forEach(function (btn) {
     btn.addEventListener("click", closeModals);
   });
-  document.querySelectorAll(".modal-backdrop").forEach(function (backdrop) {
+  document.querySelectorAll(".modal-backdrop:not(#levelSheet)").forEach(function (backdrop) {
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop) closeModals();
     });
+  });
+  // Tapping outside the pause sheet resumes; the intro sheet needs an explicit choice.
+  $("levelSheet").addEventListener("click", function (e) {
+    if (e.target === $("levelSheet") && phase === "paused") resume();
   });
 
   $("themeDarkBtn").addEventListener("click", function () {
@@ -1151,40 +1768,79 @@
 
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
-      var anyOpen = Array.prototype.some.call(
-        document.querySelectorAll(".modal-backdrop"),
-        function (m) {
-          return m.classList.contains("open");
-        },
-      );
-      if (anyOpen) {
+      if (anyModalOpen()) {
         closeModals();
         return;
       }
-      if ($("gameScreen").classList.contains("active")) togglePause();
+      if (sheetOpen()) {
+        if (phase === "paused") resume();
+        else if (phase === "intro") goHome();
+        return;
+      }
+      if (activeScreen() === "game") togglePause();
+    } else if ((e.key === "p" || e.key === "P") && activeScreen() === "game" && !anyModalOpen()) {
+      togglePause();
+    } else if ((e.key === "h" || e.key === "H") && phase === "play") {
+      hint();
     }
+  });
+
+  // Never let the clock run while the app is in the background.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && phase === "play") pause();
+  });
+
+  window.addEventListener("popstate", function () {
+    if (anyModalOpen()) {
+      closeModals();
+      if (activeScreen() !== "home") {
+        try { history.pushState({ mm: 1 }, ""); } catch (e) { /* ignore */ }
+      }
+      return;
+    }
+    if (activeScreen() === "game" && (phase === "play" || phase === "peek")) {
+      // Back during a round = pause, not quit.
+      if (phase === "play") pause();
+      try { history.pushState({ mm: 1 }, ""); } catch (e) { /* ignore */ }
+      return;
+    }
+    stopRound();
+    showHome();
   });
 
   /* ---------- init ---------- */
   window.MM.hydrateIcons();
-  document.documentElement.setAttribute("data-theme", data.theme || "dark");
-  $("themeDarkBtn").classList.toggle(
-    "active",
-    (data.theme || "dark") === "dark",
-  );
-  $("themeLightBtn").classList.toggle("active", data.theme === "light");
+  setThemeAttr(data.theme || systemTheme());
+  try {
+    window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function () {
+      if (!data.theme) setThemeAttr(systemTheme());
+    });
+  } catch (e) { /* old Safari */ }
   $("soundBtn").innerHTML = Icon(data.soundOn ? "volume-2" : "volume-x");
   $("soundToggle").classList.toggle("on", !!data.soundOn);
+  $("soundToggle").setAttribute("aria-checked", String(!!data.soundOn));
+  $("hapticToggle").classList.toggle("on", !!data.haptics);
+  $("hapticToggle").setAttribute("aria-checked", String(!!data.haptics));
+  if (!navigator.vibrate) $("hapticToggle").closest(".modal-row").hidden = true;
   $("volumeRange").value = Math.round(
     (typeof data.volume === "number" ? data.volume : 0.7) * 100,
   );
   $("volumeLabel").textContent =
     Math.round((typeof data.volume === "number" ? data.volume : 0.7) * 100) +
     "%";
+  document.body.setAttribute("data-screen", "home");
   if (!(Hero3D && Hero3D.mount($("heroArt")))) {
     attachTilt($("heroArt"), { target: $("heroOrb"), maxDeg: 10 });
   }
+  // Older saves may have earned achievements before the system existed.
+  if (Achievements.check(data, null, todayKey()).length) save();
 
-  renderLevels();
-  renderDailyBanner();
+  refreshHome();
+
+  // Offline play / "Add to Home Screen" (only over http(s); file:// can't register).
+  if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
 })();
